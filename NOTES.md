@@ -50,6 +50,62 @@ the same index and is correctness-equivalent; the double self-join was
 preferred because it never materializes rows for documents that only
 matched one of the two tags before discarding them.
 
-## Part B / Part C / Part D notes
+## Part B: ranking
+
+**Design.** `buildIndex()` tokenizes and vectorizes every document once, up
+front; `rankDocuments()` only vectorizes the query and compares it against
+those precomputed vectors. Bag-of-words vectors are sparse (`Map<term,
+count>`), not dense arrays over a global vocabulary, so comparing two
+vectors only touches terms they actually contain.
+
+**Time complexity.** Let `N` = number of documents, `L̄` = average number of
+tokens per document, `D̄` = average number of *distinct* terms per document,
+`Q` = number of tokens in the query.
+
+- Building the index: `O(N · L̄)` — tokenize and count once per document.
+  Done once at startup, not per query.
+- Ranking one query: vectorizing the query is `O(Q)`. For each of the `N`
+  documents, `cosineSimilarity` does a dot product bounded by
+  `O(min(Q, D̄))` and a magnitude sum over `O(D̄)` terms, then a sort of the
+  `N` results in `O(N log N)`. So a single search is
+  `O(N · D̄ + N log N)` — linear in the number of documents, not the full
+  vocabulary size, because sparse vectors mean the vocabulary size never
+  appears directly as a multiplicative factor.
+
+**Dividing by the product of magnitudes: what if you skip it?** Skipping
+the division and ranking by raw dot product instead means the score is no
+longer proportional similarity — it is just "how many overlapping term
+occurrences", which rewards long, wordy documents that mention a query
+term a few times over short, focused documents that are proportionally
+much more about it. Concrete example, query `"database"`:
+
+- Doc A: a short, focused doc where `database` appears 4 times among ~8
+  distinct terms total. `dot(query, A) = 4`. `cosine(query, A) ≈ 0.77`.
+- Doc B: a long, mostly-unrelated doc where `database` happens to appear 5
+  times among ~200 distinct terms. `dot(query, B) = 5`. `cosine(query, B)
+  ≈ 0.33`.
+
+Raw dot product ranks B above A (5 > 4) — the long, barely-relevant
+document wins. Cosine similarity correctly ranks A above B (0.77 > 0.33),
+because it normalizes by how much of each document's content the overlap
+represents, not just the raw count.
+
+**At 5 million documents, what breaks?** The current design holds every
+document and its bag-of-words vector in a single Node process's memory,
+and `rankDocuments` does a full linear scan over all `N` documents on
+every single request. At 5M documents: the linear scan means query
+latency grows with corpus size and every concurrent request repeats the
+full scan; holding millions of `Map` objects (one per document) puts
+sustained pressure on the V8 heap and GC; and a cold start has to
+re-read and re-vectorize the entire corpus before serving a single
+request. I'd reach for an inverted index (term → posting list of
+document IDs, so a query only touches documents containing at least one
+query term instead of all `N`), and, rather than hand-rolling that,
+either PostgreSQL's built-in full-text search (`tsvector` + a GIN index,
+which pairs naturally with the schema from Part A) or a dedicated search
+engine (Elasticsearch/OpenSearch), plus BM25-style ranking instead of raw
+cosine-over-term-frequency for better relevance at that scale.
+
+## Part C / Part D notes
 
 <!-- Filled in as those parts are implemented. -->
