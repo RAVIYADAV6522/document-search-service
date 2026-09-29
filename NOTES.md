@@ -127,6 +127,27 @@ cosine-over-term-frequency for better relevance at that scale.
 - **Negative `offset`**: treated the same as missing (`0`), for the same
   reason as non-numeric `limit`.
 
-## Part D notes
+## Part D: what I chose not to test, and why
 
-<!-- Filled in as that part is implemented. -->
+- **`loader.js`**: not given a dedicated test. It's a thin pass-through
+  over `node:fs` (`readFile` + `JSON.parse`) with no branching logic of its
+  own to get wrong; its behavior is exercised implicitly by actually
+  running the server against the real `documents.json` during development.
+  A test here would mostly be re-testing `JSON.parse` and the filesystem.
+- **`tokenizer.js` / `vectorizer.js` in isolation**: no dedicated test
+  file. Both are exercised indirectly through `ranker.test.js` (if
+  tokenizing or vector-building were broken, the ranking-order assertions
+  there would fail), and the regex-based tokenizer is short enough (one
+  line of actual logic) that its behavior is fully visible on inspection.
+  I'd add direct tests if the tokenizer grew real logic (stemming,
+  stopwords, unicode normalization).
+- **`buildIndex()` in isolation**: not tested on its own; its only job
+  (attach a precomputed vector to each document) is implicitly verified by
+  every `ranker.test.js` assertion, since a broken index would break all
+  of them.
+- **Tie-breaking when two documents have exactly equal scores**: not
+  tested. `rankDocuments` breaks ties by most-recent `created` date, but
+  constructing that exact scenario is low value relative to the time it
+  costs for this exercise.
+- **Concurrency / load on the HTTP server**: out of scope for a take-home;
+  no concurrent-request or performance testing was done.
