@@ -106,6 +106,27 @@ which pairs naturally with the schema from Part A) or a dedicated search
 engine (Elasticsearch/OpenSearch), plus BM25-style ranking instead of raw
 cosine-over-term-frequency for better relevance at that scale.
 
-## Part C / Part D notes
+## Part C: HTTP API edge cases
 
-<!-- Filled in as those parts are implemented. -->
+- **Missing `q`**: `400 Bad Request` with a JSON error body. `q` is the
+  actual input the endpoint exists to serve, not an optional pagination
+  hint, so a request without one is a malformed request, not something to
+  silently default (e.g. to "return everything").
+- **Non-numeric `limit`**: falls back to a default (`20`) rather than
+  `400`. Unlike `q`, `limit`/`offset` are convenience knobs with sensible
+  defaults; rejecting a whole search because `limit=abc` was typo'd would
+  be a worse experience than just ignoring the bad value and returning a
+  normal page of results.
+- **`limit=10000`**: clamped to a maximum (`100`), not honored as-is and
+  not rejected. Honoring it would let a single request force the server to
+  serialize and return every matching document regardless of how many
+  documents exist; clamping keeps the response bounded without failing the
+  request. `total` in the response always reflects the full match count
+  (pre-pagination), so a client can tell more results exist even when the
+  page is capped.
+- **Negative `offset`**: treated the same as missing (`0`), for the same
+  reason as non-numeric `limit`.
+
+## Part D notes
+
+<!-- Filled in as that part is implemented. -->
