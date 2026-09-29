@@ -37,7 +37,11 @@ CREATE TABLE document_tags (
 -- created_at ordering, served directly by this composite index.
 CREATE INDEX idx_documents_owner_created ON documents (owner_id, created_at DESC);
 
--- Queries 2 and 3 (tag counts, and "has both tag A and tag B"): both filter
--- and aggregate by tag_id first, then look up document_id. This index
--- serves both as an index-only scan.
+-- Query 3 ("has both tag A and tag B"): lets each half of the intersection
+-- (finance, q4) be found by an indexed tag_id lookup instead of a full
+-- document_tags scan. Verified with EXPLAIN against real seeded data (see
+-- NOTES.md) -- on a table this small (dozens of rows) PostgreSQL's planner
+-- may reasonably choose a sequential scan instead, since it's cheaper at
+-- that size; the index is what keeps the query from degrading to a full
+-- scan as document_tags grows into the millions of rows.
 CREATE INDEX idx_document_tags_tag_document ON document_tags (tag_id, document_id);

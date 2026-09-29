@@ -16,10 +16,11 @@ GROUP BY t.id, t.name
 ORDER BY document_count DESC, t.name ASC;
 
 -- 3. Documents that have both the tag 'finance' and the tag 'q4' (not either, both).
--- Self-join document_tags on document_id, once per required tag: each join is
--- an indexed lookup on (tag_id, document_id), so this is roughly
--- O(docs tagged 'finance') rather than a full table scan. See NOTES.md for
--- why this beats the array-containment alternative.
+-- Self-join document_tags on document_id, once per required tag: each join
+-- can be served by the (tag_id, document_id) index, so cost scales with how
+-- many documents carry the rarer tag rather than the full table -- avoiding
+-- the full scan an unindexed array-containment check would need. See
+-- NOTES.md for why, and for how this was actually verified with EXPLAIN.
 SELECT d.id, d.title, d.body, d.owner_id, d.created_at
 FROM documents d
 JOIN document_tags dt1 ON dt1.document_id = d.id

@@ -50,6 +50,23 @@ the same index and is correctness-equivalent; the double self-join was
 preferred because it never materializes rows for documents that only
 matched one of the two tags before discarding them.
 
+**Verified, not just asserted.** I ran `schema.sql` and `queries.sql`
+against a real PostgreSQL 16 instance (Docker), seeded with this project's
+own `documents.json` converted to rows. All 4 queries returned exactly the
+expected results (the 10 most recent for the right owner, correct tag
+counts, exactly the 3 finance+q4 documents, and the one zero-document
+owner), and all of `schema.sql`'s constraints actually hold (foreign key,
+unique, `ON DELETE CASCADE`). `EXPLAIN` on one run showed query 3 using
+`idx_document_tags_tag_document` via a bitmap index scan, confirming the
+plan above is real and reachable. Re-running the same query after an
+explicit `ANALYZE` on this tiny dataset (77 `document_tags` rows), the
+planner instead chose a sequential scan for both queries 2 and 3 --
+correct behavior, not a bug: PostgreSQL's cost-based optimizer reasonably
+prefers scanning a handful of pages outright over the overhead of an index
+lookup at that size. The index is what keeps the query cheap once
+`document_tags` is too large to scan outright, not something that changes
+the result on a small table.
+
 ## Part B: ranking
 
 **Design.** `buildIndex()` tokenizes and vectorizes every document once, up
@@ -66,27 +83,31 @@ tokens per document, `D̄` = average number of *distinct* terms per document,
   Done once at startup, not per query.
 - Ranking one query: vectorizing the query is `O(Q)`. For each of the `N`
   documents, `cosineSimilarity` does a dot product bounded by
-  `O(min(Q, D̄))` and a magnitude sum over `O(D̄)` terms, then a sort of the
-  `N` results in `O(N log N)`. So a single search is
-  `O(N · D̄ + N log N)` — linear in the number of documents, not the full
-  vocabulary size, because sparse vectors mean the vocabulary size never
-  appears directly as a multiplicative factor.
+  `O(min(Q, D̄))` and a magnitude sum over `O(D̄)` terms, so scoring every
+  document is `O(N · D̄)`. The matches (documents with score > 0, at most
+  `N` of them) are then sorted in `O(N log N)` in the worst case. So a
+  single search is `O(N · D̄ + N log N)` overall — linear in the number of
+  documents, not the full vocabulary size, because sparse vectors mean the
+  vocabulary size never appears directly as a multiplicative factor.
 
 **Dividing by the product of magnitudes: what if you skip it?** Skipping
 the division and ranking by raw dot product instead means the score is no
 longer proportional similarity — it is just "how many overlapping term
 occurrences", which rewards long, wordy documents that mention a query
 term a few times over short, focused documents that are proportionally
-much more about it. Concrete example, query `"database"`:
+much more about it. Concrete example, query `"database"` (this exact case
+is asserted in `test/similarity.test.js`, "cosineSimilarity is
+proportional, not a raw overlap count" — these are real, verified numbers,
+not hand-waved ones):
 
-- Doc A: a short, focused doc where `database` appears 4 times among ~8
-  distinct terms total. `dot(query, A) = 4`. `cosine(query, A) ≈ 0.77`.
-- Doc B: a long, mostly-unrelated doc where `database` happens to appear 5
-  times among ~200 distinct terms. `dot(query, B) = 5`. `cosine(query, B)
-  ≈ 0.33`.
+- Doc A: a short, focused doc, `{database: 4, design: 2, guide: 2}` (3
+  distinct terms). `dot(query, A) = 4`. `cosine(query, A) ≈ 0.816`.
+- Doc B: a long, mostly-unrelated doc, `{database: 5, word0: 1, ...,
+  word198: 1}` (200 distinct terms). `dot(query, B) = 5`.
+  `cosine(query, B) ≈ 0.334`.
 
 Raw dot product ranks B above A (5 > 4) — the long, barely-relevant
-document wins. Cosine similarity correctly ranks A above B (0.77 > 0.33),
+document wins. Cosine similarity correctly ranks A above B (0.816 > 0.334),
 because it normalizes by how much of each document's content the overlap
 represents, not just the raw count.
 
