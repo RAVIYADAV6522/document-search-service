@@ -1,0 +1,235 @@
+{
+  "owners": [
+    { "id": "own-1", "name": "Priya Sharma", "email": "priya.sharma@example.com" },
+    { "id": "own-2", "name": "James Whitfield", "email": "james.whitfield@example.com" },
+    { "id": "own-3", "name": "Aditi Rao", "email": "aditi.rao@example.com" },
+    { "id": "own-4", "name": "Marcus Lee", "email": "marcus.lee@example.com" },
+    { "id": "own-5", "name": "Elena Petrova", "email": "elena.petrova@example.com" }
+  ],
+  "documents": [
+    {
+      "id": "doc-001",
+      "title": "Search Ranking Algorithm Overview",
+      "body": "This document describes how the internal search service ranks results. We build a bag-of-words vector for each document and for the query, then rank by cosine similarity. Term frequency is computed per document without any external library.",
+      "owner": "own-1",
+      "tags": ["engineering", "search", "ranking"],
+      "created": "2024-03-05T10:15:00Z"
+    },
+    {
+      "id": "doc-002",
+      "title": "Annual Finance Budget Summary",
+      "body": "Summary of the annual finance budget across all departments. Includes headcount costs, infrastructure spend, and a comparison against the prior year budget allocation.",
+      "owner": "own-1",
+      "tags": ["finance", "budget"],
+      "created": "2024-04-18T09:00:00Z"
+    },
+    {
+      "id": "doc-003",
+      "title": "Onboarding Guide for New Engineers",
+      "body": "A step by step onboarding guide for new engineers joining the platform team. Covers repository access, local development setup, and where to find the search service architecture docs.",
+      "owner": "own-1",
+      "tags": ["onboarding", "hr", "engineering"],
+      "created": "2024-06-02T11:30:00Z"
+    },
+    {
+      "id": "doc-004",
+      "title": "Q4 Finance Close Checklist",
+      "body": "Checklist for closing the finance books at the end of Q4. Includes reconciling vendor invoices, accruals, and final budget variance reporting for finance leadership.",
+      "owner": "own-1",
+      "tags": ["finance", "q4", "budget"],
+      "created": "2024-10-21T14:00:00Z"
+    },
+    {
+      "id": "doc-005",
+      "title": "Search Index Sharding Strategy",
+      "body": "Proposes a sharding strategy for the search index as the document count grows. Discusses partitioning by owner and by creation date, and the tradeoffs for ranking across shards.",
+      "owner": "own-1",
+      "tags": ["engineering", "search", "infra"],
+      "created": "2025-01-15T08:45:00Z"
+    },
+    {
+      "id": "doc-006",
+      "title": "Q4 Product Roadmap",
+      "body": "Product roadmap for Q4 covering the search relevance improvements, a new tagging system for documents, and planned API changes for external partners.",
+      "owner": "own-1",
+      "tags": ["q4", "product", "roadmap"],
+      "created": "2025-10-30T13:20:00Z"
+    },
+    {
+      "id": "doc-007",
+      "title": "Incident Postmortem: Search Latency Spike",
+      "body": "Postmortem for a search latency spike caused by an unbounded ranking query. Root cause was a missing limit on the number of documents scored per request. Includes remediation steps.",
+      "owner": "own-1",
+      "tags": ["incident", "postmortem", "search"],
+      "created": "2025-02-11T16:10:00Z"
+    },
+    {
+      "id": "doc-008",
+      "title": "API Design Guidelines",
+      "body": "Internal guidelines for designing HTTP APIs, including how to handle query parameters, pagination with limit and offset, and sensible defaults for malformed input.",
+      "owner": "own-1",
+      "tags": ["engineering", "api", "design"],
+      "created": "2025-03-22T10:00:00Z"
+    },
+    {
+      "id": "doc-009",
+      "title": "Database Schema Review Notes",
+      "body": "Notes from a schema review for the documents table. Discusses normalizing tags into a join table versus storing them as an array column, and the impact on query performance.",
+      "owner": "own-1",
+      "tags": ["engineering", "database", "review"],
+      "created": "2025-05-09T09:30:00Z"
+    },
+    {
+      "id": "doc-010",
+      "title": "Finance Vendor Payment Policy",
+      "body": "Policy document describing how vendor payments are approved and processed by the finance team, including thresholds that require director sign off.",
+      "owner": "own-1",
+      "tags": ["finance", "policy"],
+      "created": "2025-06-17T12:00:00Z"
+    },
+    {
+      "id": "doc-011",
+      "title": "Frontend Component Library Spec",
+      "body": "Specification for the shared frontend component library used by the internal tools team, including the search bar component and result list rendering.",
+      "owner": "own-1",
+      "tags": ["engineering", "frontend", "design"],
+      "created": "2025-08-04T15:45:00Z"
+    },
+    {
+      "id": "doc-012",
+      "title": "Security Audit Findings Q3",
+      "body": "Findings from the Q3 security audit of internal services, including the search API. No critical findings; two medium severity issues related to rate limiting were logged.",
+      "owner": "own-1",
+      "tags": ["security", "audit", "q3"],
+      "created": "2025-09-19T11:00:00Z"
+    },
+    {
+      "id": "doc-013",
+      "title": "Q4 Sales Playbook",
+      "body": "Sales playbook for Q4 covering the updated pricing tiers, objection handling scripts, and how to demo the new document search feature to prospective customers.",
+      "owner": "own-2",
+      "tags": ["q4", "sales", "playbook"],
+      "created": "2024-11-08T10:30:00Z"
+    },
+    {
+      "id": "doc-014",
+      "title": "Marketing Campaign Retrospective",
+      "body": "Retrospective on the most recent marketing campaign, reviewing signup conversion rates and which channels drove the most qualified leads.",
+      "owner": "own-2",
+      "tags": ["marketing", "review"],
+      "created": "2025-01-27T14:20:00Z"
+    },
+    {
+      "id": "doc-015",
+      "title": "Q4 Finance Forecast Review",
+      "body": "Review of the Q4 finance forecast against actuals, with commentary from finance leadership on where spend is tracking above or below plan.",
+      "owner": "own-2",
+      "tags": ["finance", "q4", "review"],
+      "created": "2025-10-14T09:15:00Z"
+    },
+    {
+      "id": "doc-016",
+      "title": "Legal Compliance Checklist",
+      "body": "Checklist used by the legal team to confirm compliance requirements are met before a new feature, such as document search, is released to customers.",
+      "owner": "own-2",
+      "tags": ["legal", "compliance", "policy"],
+      "created": "2025-04-03T08:00:00Z"
+    },
+    {
+      "id": "doc-017",
+      "title": "Finance Expense Reimbursement Policy",
+      "body": "Policy for submitting and approving employee expense reimbursements, including travel, software subscriptions, and equipment purchases.",
+      "owner": "own-2",
+      "tags": ["finance", "policy"],
+      "created": "2025-07-22T13:40:00Z"
+    },
+    {
+      "id": "doc-018",
+      "title": "Backend Service Migration Plan",
+      "body": "Plan for migrating the backend document storage service to a new database cluster with minimal downtime for the search API.",
+      "owner": "own-2",
+      "tags": ["engineering", "backend", "infra"],
+      "created": "2025-09-01T10:00:00Z"
+    },
+    {
+      "id": "doc-019",
+      "title": "Customer Onboarding Playbook",
+      "body": "Playbook for onboarding new customers to the platform, including how to import their first batch of documents and configure search permissions.",
+      "owner": "own-2",
+      "tags": ["onboarding", "sales"],
+      "created": "2026-02-16T11:00:00Z"
+    },
+    {
+      "id": "doc-020",
+      "title": "Search Relevance Tuning Notes",
+      "body": "Notes on tuning search relevance, including experiments with term weighting and why cosine similarity was chosen over a raw dot product for ranking documents.",
+      "owner": "own-2",
+      "tags": ["engineering", "search", "ranking"],
+      "created": "2026-06-30T15:00:00Z"
+    },
+    {
+      "id": "doc-021",
+      "title": "Security Incident Response Runbook",
+      "body": "Runbook for responding to a security incident affecting internal services, including escalation contacts and how to rotate credentials for the search API.",
+      "owner": "own-3",
+      "tags": ["security", "incident", "policy"],
+      "created": "2025-03-11T09:00:00Z"
+    },
+    {
+      "id": "doc-022",
+      "title": "Product Roadmap Planning Q1",
+      "body": "Planning notes for the Q1 product roadmap, prioritizing search filters, tag based browsing, and improvements to the document ranking algorithm.",
+      "owner": "own-3",
+      "tags": ["product", "roadmap", "q1"],
+      "created": "2025-11-05T10:30:00Z"
+    },
+    {
+      "id": "doc-023",
+      "title": "Q4 Finance Audit Report",
+      "body": "Audit report covering finance controls for Q4, including a review of vendor payment approvals and budget variance across departments.",
+      "owner": "own-3",
+      "tags": ["finance", "q4", "audit"],
+      "created": "2025-12-19T14:00:00Z"
+    },
+    {
+      "id": "doc-024",
+      "title": "Q4 Hiring Plan",
+      "body": "Hiring plan for Q4, outlining open engineering and sales headcount, and the interview process for candidates applying to the platform team.",
+      "owner": "own-3",
+      "tags": ["q4", "hr", "planning"],
+      "created": "2025-10-02T08:30:00Z"
+    },
+    {
+      "id": "doc-025",
+      "title": "API Rate Limiting Design",
+      "body": "Design document for adding rate limiting to the public API, including the search endpoint, to prevent a single client from degrading service for others.",
+      "owner": "own-3",
+      "tags": ["engineering", "api", "design"],
+      "created": "2026-04-08T12:15:00Z"
+    },
+    {
+      "id": "doc-026",
+      "title": "Finance Quarterly Close Process",
+      "body": "Describes the finance quarterly close process end to end, from initial reconciliation through final sign off by the finance director.",
+      "owner": "own-4",
+      "tags": ["finance", "policy"],
+      "created": "2025-11-12T09:45:00Z"
+    },
+    {
+      "id": "doc-027",
+      "title": "Search Autocomplete Feature Spec",
+      "body": "Feature spec for adding autocomplete suggestions to the document search bar, based on the most frequent terms across previously indexed documents.",
+      "owner": "own-4",
+      "tags": ["engineering", "search", "product"],
+      "created": "2026-01-20T10:00:00Z"
+    },
+    {
+      "id": "doc-028",
+      "title": "Team Offsite Planning Notes",
+      "body": "Planning notes for the upcoming team offsite, including the agenda, budget approval status, and logistics for the platform and search teams.",
+      "owner": "own-4",
+      "tags": ["hr", "planning"],
+      "created": "2026-03-15T13:00:00Z"
+    }
+  ]
+}
