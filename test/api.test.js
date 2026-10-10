@@ -131,3 +131,50 @@ test('GET /search reads documents loaded from the database', { skip }, async () 
   assert.equal(status, 200);
   assert.equal(body.results[0].id, 'doc-02');
 });
+
+test('GET /search?engine=sql matches different forms of a word (stemming)', { skip }, async () => {
+  // Documents say "budget" and "forecast"; the query says "budgets" and "forecasting".
+  const { status, body } = await get('/search?q=budgets&engine=sql');
+  assert.equal(status, 200);
+  assert.equal(body.engine, 'sql');
+  assert.deepEqual(body.results.map((d) => d.id).sort(), ['doc-01', 'doc-03']);
+  const forecast = await get('/search?q=forecasting&engine=sql');
+  assert.deepEqual(forecast.body.results.map((d) => d.id), ['doc-02']);
+});
+
+test('GET /search?engine=sql ranks title matches above body-only matches', { skip }, async () => {
+  // "engineering" is in the title of doc-10..19 but in no body; "ranking"
+  // is only in their body. A title hit should outrank a body hit.
+  const title = await get('/search?q=engineering&engine=sql');
+  const bodyOnly = await get('/search?q=ranking&engine=sql');
+  assert.ok(title.body.results[0].score > bodyOnly.body.results[0].score);
+});
+
+test('GET /search?engine=sql paginates and reports the full total', { skip }, async () => {
+  const { body } = await get('/search?q=engineering&engine=sql&limit=3&offset=9');
+  assert.equal(body.total, 10);
+  assert.equal(body.results.length, 1);
+});
+
+test('GET /search?engine=sql with only stop words matches nothing instead of erroring', { skip }, async () => {
+  const { status, body } = await get('/search?q=the&engine=sql');
+  assert.equal(status, 200);
+  assert.equal(body.total, 0);
+});
+
+test('full-text search is answered by the GIN index', { skip }, async () => {
+  // With a dozen rows the planner rightly prefers a sequential scan, so
+  // turn that off to check the index *can* serve the query.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL enable_seqscan = off');
+    const { rows } = await client.query(
+      `EXPLAIN SELECT id FROM documents WHERE search_vector @@ websearch_to_tsquery('english', 'budget')`,
+    );
+    await client.query('ROLLBACK');
+    assert.match(rows.map((r) => r['QUERY PLAN']).join('\n'), /idx_documents_search/);
+  } finally {
+    client.release();
+  }
+});

@@ -61,3 +61,14 @@ test('unknown routes return 404', async () => {
   const res = await fetch(`${base}/nope`);
   assert.equal(res.status, 404);
 });
+
+test('GET /search defaults to the cosine engine', async () => {
+  const res = await fetch(`${base}/search?q=finance`);
+  const body = await res.json();
+  assert.equal(body.engine, 'cosine');
+});
+
+test('GET /search with an unknown engine returns 400', async () => {
+  const res = await fetch(`${base}/search?q=finance&engine=elastic`);
+  assert.equal(res.status, 400);
+});

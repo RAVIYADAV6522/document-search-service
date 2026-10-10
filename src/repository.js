@@ -87,3 +87,29 @@ export async function inactiveOwners(db) {
   `);
   return rows;
 }
+
+// Full-text search (GET /search?engine=sql). websearch_to_tsquery accepts
+// the same loose syntax people type into search boxes ("quoted phrases",
+// -exclusions, or) and never throws on bad input. @@ is answered by the GIN
+// index on search_vector; ts_rank scores each match, weighting title terms
+// above body terms. Ties fall back to newest first, like the cosine ranker.
+export async function searchFullText(db, query, { limit, offset }) {
+  const [page, count] = await Promise.all([
+    db.query(
+      `SELECT d.id, d.title, d.body, d.owner_id AS owner, d.created_at AS created, ${TAGS_OF_D},
+              ts_rank(d.search_vector, q.query) AS score
+       FROM documents d, websearch_to_tsquery('english', $1) AS q(query)
+       WHERE d.search_vector @@ q.query
+       ORDER BY score DESC, d.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [query, limit, offset],
+    ),
+    db.query(
+      `SELECT COUNT(*)::int AS total
+       FROM documents d
+       WHERE d.search_vector @@ websearch_to_tsquery('english', $1)`,
+      [query],
+    ),
+  ]);
+  return { total: count.rows[0].total, results: page.rows };
+}

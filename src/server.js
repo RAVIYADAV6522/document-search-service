@@ -8,12 +8,14 @@ import {
   tagStats,
   documentsWithAllTags,
   inactiveOwners,
+  searchFullText,
 } from './repository.js';
 import { buildIndex, rankDocuments } from './ranker.js';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const MAX_TAGS = 10;
+const ENGINES = ['cosine', 'sql'];
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 function sendJson(res, statusCode, body) {
@@ -61,15 +63,24 @@ export function createServer({ index, db }) {
       if (!q || !q.trim()) {
         return sendJson(res, 400, { error: 'query parameter "q" is required' });
       }
+      const engine = url.searchParams.get('engine') ?? 'cosine';
+      if (!ENGINES.includes(engine)) {
+        return sendJson(res, 400, { error: `engine must be one of: ${ENGINES.join(', ')}` });
+      }
       const { limit, offset } = parsePagination(url.searchParams);
-      const allMatches = rankDocuments(q, index);
-      return sendJson(res, 200, {
-        query: q,
-        total: allMatches.length,
-        limit,
-        offset,
-        results: allMatches.slice(offset, offset + limit),
-      });
+
+      // cosine: the from-scratch in-memory ranker (ranker.js).
+      // sql: Postgres full-text search (repository.js, migration 002).
+      let total;
+      let results;
+      if (engine === 'sql') {
+        ({ total, results } = await searchFullText(db, q, { limit, offset }));
+      } else {
+        const allMatches = rankDocuments(q, index);
+        total = allMatches.length;
+        results = allMatches.slice(offset, offset + limit);
+      }
+      return sendJson(res, 200, { query: q, engine, total, limit, offset, results });
     }
 
     if (path === '/owners/inactive') {
