@@ -52,12 +52,12 @@ the same index and is correctness-equivalent; the double self-join was
 preferred because it never materializes rows for documents that only
 matched one of the two tags before discarding them.
 
-**Verified, not just asserted.** I ran `schema.sql` and `queries.sql`
+**Verified, not just asserted.** I ran `migrations/001_init.sql` (originally `schema.sql`) and `queries.sql`
 against a real PostgreSQL 16 instance (Docker), seeded with this project's
 own `documents.json` converted to rows. All 4 queries returned exactly the
 expected results (the 10 most recent for the right owner, correct tag
 counts, exactly the 3 finance+q4 documents, and the one zero-document
-owner), and all of `schema.sql`'s constraints actually hold (foreign key,
+owner), and all of the schema's constraints actually hold (foreign key,
 unique, `ON DELETE CASCADE`). `EXPLAIN` on one run showed query 3 using
 `idx_document_tags_tag_document` via a bitmap index scan, confirming the
 plan above is real and reachable. Re-running the same query after an
@@ -174,3 +174,28 @@ cosine-over-term-frequency for better relevance at that scale.
   costs for this exercise.
 - **Concurrency / load on the HTTP server**: out of scope for a take-home;
   no concurrent-request or performance testing was done.
+
+## Later: moving from design to a running PostgreSQL service
+
+The original brief kept the SQL as a standalone design and had the service load
+`documents.json` in memory. The service now runs on PostgreSQL. Decisions made along
+the way:
+
+- **TEXT primary keys instead of UUID.** The dataset already has readable ids
+  (`own-1`, `doc-001`), and the API exposes them in URLs (`/owners/own-1/documents`).
+  Keeping them as TEXT means seeding preserves them; rows created without an id still
+  default to `gen_random_uuid()::text`.
+- **Query 3 generalized to any number of tags.** The self-join in `queries.sql` needs
+  one join per tag, so it can't take a variable list. `/documents?tags=` instead uses
+  relational division: filter `document_tags` to the requested tags, `GROUP BY` document,
+  and keep groups where `COUNT(*)` equals the number of tags. The `(tag_id, document_id)`
+  index still serves the filter. Requested tags are de-duplicated first, otherwise the
+  count could never match.
+- **Full-text search as a second engine, not a replacement.** The cosine ranker stays
+  the default so the two can be compared. `search_vector` is a `GENERATED ALWAYS ...
+  STORED` column, so it can't drift from `title`/`body`. On 28 rows the planner prefers
+  a sequential scan, so the test suite checks with `enable_seqscan = off` that the GIN
+  index *can* serve `@@`.
+- **The cosine index is built once at startup** from the database. Documents added
+  later are visible to `engine=sql` immediately but to `engine=cosine` only after a
+  restart, an accepted limitation for an in-memory index.

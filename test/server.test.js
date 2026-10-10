@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from '../src/server.js';
+import { createServer, readPort } from '../src/server.js';
 import { buildIndex } from '../src/ranker.js';
 
 const fixtures = [
@@ -22,7 +22,7 @@ const fixtures = [
   },
 ];
 
-const server = createServer(buildIndex(fixtures));
+const server = createServer({ index: buildIndex(fixtures) });
 await new Promise((resolve) => server.listen(0, resolve));
 const { port } = server.address();
 const base = `http://localhost:${port}`;
@@ -60,4 +60,77 @@ test('GET /search with limit=10000 is clamped to the maximum page size', async (
 test('unknown routes return 404', async () => {
   const res = await fetch(`${base}/nope`);
   assert.equal(res.status, 404);
+});
+
+test('GET /search defaults to the cosine engine', async () => {
+  const res = await fetch(`${base}/search?q=finance`);
+  const body = await res.json();
+  assert.equal(body.engine, 'cosine');
+});
+
+test('GET /search with an unknown engine returns 400', async () => {
+  const res = await fetch(`${base}/search?q=finance&engine=elastic`);
+  assert.equal(res.status, 400);
+});
+
+// Servers around fake databases, for behaviour that doesn't need real SQL.
+async function startWith(db) {
+  const srv = createServer({ index: buildIndex(fixtures), db });
+  await new Promise((resolve) => srv.listen(0, resolve));
+  after(() => srv.close());
+  return `http://localhost:${srv.address().port}`;
+}
+const healthyDb = { query: async () => ({ rows: [{}], rowCount: 1 }) };
+const brokenDb = {
+  query: async () => {
+    throw new Error('connection to server at "secret-host.neon.tech" failed');
+  },
+};
+
+test('GET /healthz returns 200 when the database answers', async () => {
+  const res = await fetch(`${await startWith(healthyDb)}/healthz`);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.status, 'ok');
+  assert.equal(body.documents, 2);
+});
+
+test('GET /healthz returns 503 when the database is down', async () => {
+  const res = await fetch(`${await startWith(brokenDb)}/healthz`);
+  assert.equal(res.status, 503);
+});
+
+test('a database error returns 500 without leaking its details', async () => {
+  const res = await fetch(`${await startWith(brokenDb)}/tags/stats`);
+  assert.equal(res.status, 500);
+  const text = await res.text();
+  assert.ok(!text.includes('secret-host'), 'error details must not reach the client');
+});
+
+test('non-GET requests return 405 with an Allow header', async () => {
+  const res = await fetch(`${base}/search?q=x`, { method: 'POST' });
+  assert.equal(res.status, 405);
+  assert.equal(res.headers.get('allow'), 'GET');
+});
+
+test('responses allow cross-origin reads', async () => {
+  const res = await fetch(`${base}/search?q=finance`);
+  assert.equal(res.headers.get('access-control-allow-origin'), '*');
+});
+
+test('GET /search with an overly long query returns 400', async () => {
+  const res = await fetch(`${base}/search?q=${'a'.repeat(501)}`);
+  assert.equal(res.status, 400);
+});
+
+test('a malformed percent-encoded owner id returns 400, not 500', async () => {
+  const res = await fetch(`${await startWith(healthyDb)}/owners/%E0%A4/documents`);
+  assert.equal(res.status, 400);
+});
+
+test('readPort defaults to 3000 and rejects invalid values', () => {
+  assert.equal(readPort(undefined), 3000);
+  assert.equal(readPort('8080'), 8080);
+  assert.throws(() => readPort('abc'), /PORT must be/);
+  assert.throws(() => readPort('70000'), /PORT must be/);
 });

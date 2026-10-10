@@ -17,7 +17,7 @@ Before settling on the schema, I asked ChatGPT independently for a recommendatio
 * `owners`
 * `documents`, with tags stored directly as a `tags TEXT[]` column
 
-Claude Code instead recommended the normalized 4-table design actually used in `schema.sql`:
+Claude Code instead recommended the normalized 4-table design actually used in `migrations/001_init.sql`:
 
 * `owners`
 * `documents`
