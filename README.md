@@ -1,8 +1,8 @@
 # document-search-service
 
-**Live API:** LIVE_URL — try [`/search?q=budget&engine=sql`](LIVE_URL/search?q=budget&engine=sql)
-or [`/documents?tags=finance,q4`](LIVE_URL/documents?tags=finance,q4).
-(Free hosting: the first request after a quiet spell can take ~30 s while the server wakes up.)
+**Live API:** https://document-search-service-0y08.onrender.com — try [`/search?q=budget&engine=sql`](https://document-search-service-0y08.onrender.com/search?q=budget&engine=sql)
+or [`/documents?tags=finance,q4`](https://document-search-service-0y08.onrender.com/documents?tags=finance,q4).
+(Free hosting: the first request after a quiet spell can take up to a minute while the server wakes up.)
 
 A document search API on **PostgreSQL**: a normalized schema with versioned migrations,
 SQL endpoints for reporting queries, Postgres full-text search, and an in-memory
@@ -66,7 +66,7 @@ All endpoints are `GET` and return JSON.
 **Example**
 
 ```
-$ curl 'LIVE_URL/search?q=search%20ranking&limit=1'
+$ curl 'https://document-search-service-0y08.onrender.com/search?q=search%20ranking&limit=1'
 {
   "query": "search ranking",
   "engine": "cosine",
