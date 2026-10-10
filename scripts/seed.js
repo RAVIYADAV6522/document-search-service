@@ -1,13 +1,19 @@
 // Loads documents.json into the database. Safe to run repeatedly: rows are
 // upserted by id, and each seeded document's tags are replaced, so the
 // database ends up matching the file. Everything runs in one transaction.
+//
+//   npm run seed                  the 28 hand-written documents
+//   npm run seed -- --total=10000 plus generated ones up to 10,000 in total
 import { loadDataset } from '../src/loader.js';
 import { createPool } from '../src/db.js';
+import { expandDataset } from './generate.js';
 
 export async function seed(pool, { owners, documents }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Bulk loads take longer than the 5 s limit set for API queries.
+    await client.query("SET LOCAL statement_timeout = '120s'");
 
     // unnest() turns parallel arrays into rows, so each table is filled
     // with a single statement instead of one INSERT per row.
@@ -63,10 +69,18 @@ export async function seed(pool, { owners, documents }) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+  const totalArg = process.argv.find((a) => a.startsWith('--total='));
+  const total = totalArg ? Number(totalArg.split('=')[1]) : 0;
+  if (totalArg && !(Number.isInteger(total) && total > 0)) {
+    throw new Error(`--total must be a positive integer, got "${totalArg}"`);
+  }
   const pool = createPool();
   try {
-    const counts = await seed(pool, await loadDataset());
-    console.log(`seeded ${counts.owners} owners, ${counts.documents} documents, ${counts.tags} tags`);
+    const started = Date.now();
+    const counts = await seed(pool, expandDataset(await loadDataset(), total));
+    console.log(
+      `seeded ${counts.owners} owners, ${counts.documents} documents, ${counts.tags} tags in ${Date.now() - started} ms`,
+    );
   } finally {
     await pool.end();
   }

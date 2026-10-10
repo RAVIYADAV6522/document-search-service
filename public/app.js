@@ -85,6 +85,7 @@ function highlighted(text, pattern) {
   return frag;
 }
 
+const fmt = (n) => (typeof n === 'number' ? n.toLocaleString('en-US') : n);
 const dateFormat = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
 function card(doc, pattern) {
@@ -122,7 +123,7 @@ function setStatus(content, isError = false) {
 }
 
 function setStats({ matches = '–', ms = null } = {}) {
-  $('stat-matches').textContent = matches;
+  $('stat-matches').textContent = fmt(matches);
   $('stat-time').textContent = ms === null ? '–' : `${ms} ms`;
 }
 
@@ -194,15 +195,15 @@ async function renderSearch(signal) {
   const from = data.total === 0 ? 0 : data.offset + 1;
   const to = data.offset + data.results.length;
   setStatus([
-    el('strong', { textContent: `${data.total} ${data.total === 1 ? 'match' : 'matches'}` }),
+    el('strong', { textContent: `${fmt(data.total)} ${data.total === 1 ? 'match' : 'matches'}` }),
     ` for “${data.query}” · ${ENGINE_LABELS[data.engine]}`,
-    data.total > PAGE_SIZE ? ` · showing ${from}–${to}` : '',
+    data.total > PAGE_SIZE ? ` · showing ${fmt(from)}–${fmt(to)}` : '',
   ]);
   $('results').replaceChildren(cardList(data.results, highlightPattern(state.q)));
 
   const pages = Math.ceil(data.total / PAGE_SIZE);
   $('pager').hidden = pages <= 1;
-  $('page-info').textContent = `Page ${state.page + 1} of ${pages}`;
+  $('page-info').textContent = `Page ${fmt(state.page + 1)} of ${fmt(pages)}`;
   $('prev').disabled = state.page === 0;
   $('next').disabled = state.page >= pages - 1;
 }
@@ -211,14 +212,14 @@ async function renderCompare(signal) {
   const query = (engine) =>
     api(`/search?${new URLSearchParams({ q: state.q, engine, limit: PAGE_SIZE })}`, signal);
   const [sql, cosine] = await Promise.all([query('sql'), query('cosine')]);
-  lastStats = { matches: `${sql.total} / ${cosine.total}` };
+  lastStats = { matches: `${fmt(sql.total)} / ${fmt(cosine.total)}` };
 
   const pattern = highlightPattern(state.q);
   const column = (data) =>
     el(
       'div',
       { className: 'column' },
-      el('h2', {}, ENGINE_LABELS[data.engine], el('span', { textContent: `${data.total} matches` })),
+      el('h2', {}, ENGINE_LABELS[data.engine], el('span', { textContent: `${fmt(data.total)} matches` })),
       cardList(data.results, pattern),
     );
   setStatus([
@@ -233,7 +234,7 @@ async function renderTag(signal) {
   const data = await api(`/documents?${new URLSearchParams({ tags: state.tag })}`, signal);
   lastStats = { matches: data.total };
   setStatus([
-    el('strong', { textContent: `${data.total} ${data.total === 1 ? 'document' : 'documents'}` }),
+    el('strong', { textContent: `${fmt(data.total)} ${data.total === 1 ? 'document' : 'documents'}` }),
     ' tagged ',
     el('code', { textContent: `#${state.tag}` }),
     ', newest first · ',
@@ -265,7 +266,7 @@ async function loadSidebar() {
       api('/tags/stats'),
       api('/owners/inactive'),
     ]);
-    $('stat-docs').textContent = health.documents;
+    $('stat-docs').textContent = fmt(health.documents);
     $('stat-tags').textContent = stats.results.length;
 
     const max = Math.max(...stats.results.map((t) => t.document_count), 1);
@@ -276,7 +277,7 @@ async function loadSidebar() {
         'button',
         { type: 'button', className: 'tag-row', onclick: () => showTag(tag) },
         el('span', { textContent: `#${tag}` }),
-        el('span', { className: 'tag-count', textContent: count }),
+        el('span', { className: 'tag-count', textContent: fmt(count) }),
         el('span', { className: 'bar' }, bar),
       );
       btn.dataset.tag = tag;
