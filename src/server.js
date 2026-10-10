@@ -1,5 +1,7 @@
 import http from 'node:http';
-import { URL } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { URL, fileURLToPath } from 'node:url';
 import { createPool } from './db.js';
 import {
   listDocuments,
@@ -19,6 +21,20 @@ const ENGINES = ['cosine', 'sql'];
 const MAX_QUERY_LENGTH = 500;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
+// The search page. A fixed map from URL to file, read once at startup, so a
+// request path is never turned into a filesystem path.
+const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
+const STATIC_FILES = new Map(
+  [
+    ['/', 'index.html', 'text/html; charset=utf-8'],
+    ['/app.js', 'app.js', 'text/javascript; charset=utf-8'],
+    ['/styles.css', 'styles.css', 'text/css; charset=utf-8'],
+  ].map(([path, file, type]) => [path, { body: readFileSync(join(PUBLIC_DIR, file)), type }]),
+);
+// The page only loads its own scripts and styles and calls its own API.
+const PAGE_CSP =
+  "default-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
 function sendJson(res, statusCode, body, headers = {}) {
   const payload = JSON.stringify(body);
   res.writeHead(statusCode, {
@@ -31,6 +47,17 @@ function sendJson(res, statusCode, body, headers = {}) {
     ...headers,
   });
   res.end(payload);
+}
+
+function sendStatic(res, { body, type }) {
+  res.writeHead(200, {
+    'Content-Type': type,
+    'Content-Length': body.length,
+    'Content-Security-Policy': PAGE_CSP,
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'no-cache',
+  });
+  res.end(body);
 }
 
 // Thrown for bad input found deep in a handler, so the error handler can
@@ -84,6 +111,9 @@ function parseTags(raw) {
 export function createServer({ index, db, log = () => {} }) {
   async function handle(req, res, url) {
     const path = url.pathname;
+
+    const file = STATIC_FILES.get(path);
+    if (file) return sendStatic(res, file);
 
     // Used by the host's health check: healthy only if the database answers.
     if (path === '/healthz') {

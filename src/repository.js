@@ -1,17 +1,19 @@
 // Every SQL statement the service runs lives here. All values are passed as
 // bind parameters ($1, $2, ...), never concatenated into the SQL text.
 // Rows come back in the same shape documents.json uses (owner, created,
-// tags), so the API response format doesn't depend on the storage layer.
+// tags) plus the owner's display name, so the API response format doesn't
+// depend on the storage layer.
 
 // Every document with its tags, for building the in-memory cosine index.
 export async function listDocuments(db) {
   const { rows } = await db.query(`
-    SELECT d.id, d.title, d.body, d.owner_id AS owner, d.created_at AS created,
+    SELECT d.id, d.title, d.body, d.owner_id AS owner, o.name AS owner_name, d.created_at AS created,
            COALESCE(array_agg(t.name ORDER BY t.name) FILTER (WHERE t.id IS NOT NULL), '{}') AS tags
     FROM documents d
+    JOIN owners o ON o.id = d.owner_id
     LEFT JOIN document_tags dt ON dt.document_id = d.id
     LEFT JOIN tags t ON t.id = dt.tag_id
-    GROUP BY d.id
+    GROUP BY d.id, o.id
     ORDER BY d.created_at DESC
   `);
   return rows;
@@ -33,8 +35,9 @@ export async function ownerExists(db, ownerId) {
 // idx_documents_owner_created.
 export async function recentDocumentsForOwner(db, ownerId) {
   const { rows } = await db.query(
-    `SELECT d.id, d.title, d.body, d.owner_id AS owner, d.created_at AS created, ${TAGS_OF_D}
+    `SELECT d.id, d.title, d.body, d.owner_id AS owner, o.name AS owner_name, d.created_at AS created, ${TAGS_OF_D}
      FROM documents d
+     JOIN owners o ON o.id = d.owner_id
      WHERE d.owner_id = $1
      ORDER BY d.created_at DESC
      LIMIT 10`,
@@ -68,8 +71,9 @@ export async function documentsWithAllTags(db, tagNames) {
        GROUP BY dt.document_id
        HAVING COUNT(*) = cardinality($1::text[])
      )
-     SELECT d.id, d.title, d.body, d.owner_id AS owner, d.created_at AS created, ${TAGS_OF_D}
+     SELECT d.id, d.title, d.body, d.owner_id AS owner, o.name AS owner_name, d.created_at AS created, ${TAGS_OF_D}
      FROM documents d
+     JOIN owners o ON o.id = d.owner_id
      JOIN matches m ON m.document_id = d.id
      ORDER BY d.created_at DESC`,
     [tagNames],
@@ -96,9 +100,11 @@ export async function inactiveOwners(db) {
 export async function searchFullText(db, query, { limit, offset }) {
   const [page, count] = await Promise.all([
     db.query(
-      `SELECT d.id, d.title, d.body, d.owner_id AS owner, d.created_at AS created, ${TAGS_OF_D},
+      `SELECT d.id, d.title, d.body, d.owner_id AS owner, o.name AS owner_name, d.created_at AS created, ${TAGS_OF_D},
               ts_rank(d.search_vector, q.query) AS score
-       FROM documents d, websearch_to_tsquery('english', $1) AS q(query)
+       FROM documents d
+       JOIN owners o ON o.id = d.owner_id
+       CROSS JOIN websearch_to_tsquery('english', $1) AS q(query)
        WHERE d.search_vector @@ q.query
        ORDER BY score DESC, d.created_at DESC
        LIMIT $2 OFFSET $3`,

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Document Search</title>
+  <meta name="description" content="Search 28 sample documents with PostgreSQL full-text search or a from-scratch cosine-similarity ranker.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Ccircle cx='14' cy='14' r='6' fill='none' stroke='white' stroke-width='3'/%3E%3Cpath d='M19 19l6 6' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        Document Search
+      </a>
+      <nav class="toplinks">
+        <a href="https://github.com/RAVIYADAV6522/document-search-service">GitHub</a>
+        <a href="#api">API</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>Search the document library</h1>
+      <p class="lede">
+        Two search engines over the same PostgreSQL data: Postgres full-text search
+        (<code>tsvector</code>, GIN index, <code>ts_rank</code>) and a cosine-similarity
+        ranker written from scratch. Pick one, or compare them side by side.
+      </p>
+
+      <form class="searchbar" id="search-form" role="search">
+        <label class="visually-hidden" for="q">Search documents</label>
+        <svg class="searchbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input id="q" name="q" type="search" autocomplete="off" maxlength="500"
+               placeholder="Try budget, &quot;latency spike&quot; or finance -audit" autofocus>
+        <button type="submit">Search</button>
+      </form>
+
+      <div class="controls">
+        <div class="segmented" role="radiogroup" aria-label="Search engine" id="engine">
+          <button type="button" role="radio" data-engine="sql">PostgreSQL full-text</button>
+          <button type="button" role="radio" data-engine="cosine">Cosine (from scratch)</button>
+          <button type="button" role="radio" data-engine="compare">Compare both</button>
+        </div>
+        <p class="engine-hint" id="engine-hint"></p>
+      </div>
+
+      <div class="suggestions" id="suggestions">
+        <span>Try:</span>
+      </div>
+    </section>
+
+    <section class="stats" id="stats" aria-label="Library statistics">
+      <div class="stat"><span class="stat-value" id="stat-docs">–</span><span class="stat-label">documents</span></div>
+      <div class="stat"><span class="stat-value" id="stat-tags">–</span><span class="stat-label">tags</span></div>
+      <div class="stat"><span class="stat-value" id="stat-matches">–</span><span class="stat-label">matches</span></div>
+      <div class="stat"><span class="stat-value" id="stat-time">–</span><span class="stat-label">response time</span></div>
+    </section>
+
+    <div class="layout">
+      <section class="results-area" aria-live="polite">
+        <div class="status" id="status"></div>
+        <div id="results"></div>
+        <nav class="pager" id="pager" hidden>
+          <button type="button" id="prev">← Previous</button>
+          <span id="page-info"></span>
+          <button type="button" id="next">Next →</button>
+        </nav>
+      </section>
+
+      <aside class="sidebar">
+        <div class="panel">
+          <h2>Browse by tag</h2>
+          <p class="panel-note">Documents per tag, from <code>GET /tags/stats</code>. Click to filter.</p>
+          <ul class="tag-list" id="tag-list"></ul>
+        </div>
+        <div class="panel">
+          <h2>Owners with no documents</h2>
+          <p class="panel-note">From <code>GET /owners/inactive</code> (<code>NOT EXISTS</code>).</p>
+          <ul class="owner-list" id="inactive-owners"></ul>
+        </div>
+      </aside>
+    </div>
+
+    <section class="api" id="api">
+      <h2>API</h2>
+      <p>Everything on this page comes from these JSON endpoints.</p>
+      <ul>
+        <li><a href="/search?q=budget&amp;engine=sql"><code>/search?q=budget&amp;engine=sql</code></a> ranked search (<code>engine=sql|cosine</code>, <code>limit</code>, <code>offset</code>)</li>
+        <li><a href="/documents?tags=finance,q4"><code>/documents?tags=finance,q4</code></a> documents with every listed tag</li>
+        <li><a href="/owners/own-1/documents"><code>/owners/own-1/documents</code></a> an owner's 10 most recent documents</li>
+        <li><a href="/tags/stats"><code>/tags/stats</code></a> documents per tag</li>
+        <li><a href="/owners/inactive"><code>/owners/inactive</code></a> owners with no documents</li>
+        <li><a href="/healthz"><code>/healthz</code></a> health check</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="wrap footer">
+    Node.js · PostgreSQL (Neon) · Render
+  </footer>
+
+  <template id="card-template">
+    <article class="card">
+      <div class="card-head">
+        <h3 class="card-title"></h3>
+        <span class="score" title="Relevance score"></span>
+      </div>
+      <p class="card-body"></p>
+      <div class="card-meta">
+        <span class="owner"></span>
+        <span class="dot" aria-hidden="true">·</span>
+        <time class="date"></time>
+        <span class="dot" aria-hidden="true">·</span>
+        <span class="doc-id"></span>
+      </div>
+      <div class="card-tags"></div>
+    </article>
+  </template>
+</body>
+</html>

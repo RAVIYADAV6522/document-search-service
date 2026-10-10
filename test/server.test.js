@@ -134,3 +134,25 @@ test('readPort defaults to 3000 and rejects invalid values', () => {
   assert.throws(() => readPort('abc'), /PORT must be/);
   assert.throws(() => readPort('70000'), /PORT must be/);
 });
+
+test('GET / serves the search page with a content security policy', async () => {
+  const res = await fetch(`${base}/`);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /text\/html/);
+  assert.match(res.headers.get('content-security-policy'), /default-src 'self'/);
+  assert.match(await res.text(), /<title>Document Search<\/title>/);
+});
+
+test('the page script and stylesheet are served with the right types', async () => {
+  const js = await fetch(`${base}/app.js`);
+  const css = await fetch(`${base}/styles.css`);
+  assert.match(js.headers.get('content-type'), /text\/javascript/);
+  assert.match(css.headers.get('content-type'), /text\/css/);
+});
+
+test('only the listed static files are served, not arbitrary paths', async () => {
+  for (const path of ['/index.html', '/../package.json', '/%2e%2e/package.json', '/public/app.js']) {
+    const res = await fetch(`${base}${path}`);
+    assert.equal(res.status, 404, path);
+  }
+});
