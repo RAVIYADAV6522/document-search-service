@@ -13,52 +13,34 @@
   <header class="topbar">
     <div class="wrap topbar-inner">
       <a class="brand" href="/">
-        <span class="brand-mark" aria-hidden="true"></span>
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><circle cx="14" cy="14" r="6"/><path d="M19 19l6 6"/></svg>
         Document Search
       </a>
-      <nav class="toplinks">
-        <a href="https://github.com/RAVIYADAV6522/document-search-service">GitHub</a>
-        <a href="#api">API</a>
-      </nav>
+      <a class="toplink" href="https://github.com/RAVIYADAV6522/document-search-service">GitHub</a>
     </div>
   </header>
 
   <main class="wrap">
     <section class="hero">
-      <h1>Search the document library</h1>
-      <p class="lede">
-        Two search engines over the same PostgreSQL data: Postgres full-text search
-        (<code>tsvector</code>, GIN index, <code>ts_rank</code>) and a cosine-similarity
-        ranker written from scratch. Pick one, or compare them side by side.
-      </p>
-
       <form class="searchbar" id="search-form" role="search">
         <label class="visually-hidden" for="q">Search documents</label>
         <svg class="searchbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
         <input id="q" name="q" type="search" autocomplete="off" maxlength="500"
-               placeholder="Try budget, &quot;latency spike&quot; or finance -audit" autofocus>
+               placeholder="Search documents" autofocus>
         <button type="submit">Search</button>
       </form>
 
       <div class="controls">
         <div class="segmented" role="radiogroup" aria-label="Search engine" id="engine">
-          <button type="button" role="radio" data-engine="sql">PostgreSQL full-text</button>
-          <button type="button" role="radio" data-engine="cosine">Cosine (from scratch)</button>
-          <button type="button" role="radio" data-engine="compare">Compare both</button>
+          <button type="button" role="radio" data-engine="sql"
+                  title="PostgreSQL full-text search: matches every word and understands word forms">SQL</button>
+          <button type="button" role="radio" data-engine="cosine"
+                  title="Cosine similarity ranker written from scratch: matches any word exactly">Cosine</button>
+          <button type="button" role="radio" data-engine="compare"
+                  title="Run both engines side by side">Compare</button>
         </div>
-        <p class="engine-hint" id="engine-hint"></p>
+        <p class="library-meta" id="library-meta"></p>
       </div>
-
-      <div class="suggestions" id="suggestions">
-        <span>Try:</span>
-      </div>
-    </section>
-
-    <section class="stats" id="stats" aria-label="Library statistics">
-      <div class="stat"><span class="stat-value" id="stat-docs">–</span><span class="stat-label">documents</span></div>
-      <div class="stat"><span class="stat-value" id="stat-tags">–</span><span class="stat-label">tags</span></div>
-      <div class="stat"><span class="stat-value" id="stat-matches">–</span><span class="stat-label">matches</span></div>
-      <div class="stat"><span class="stat-value" id="stat-time">–</span><span class="stat-label">response time</span></div>
     </section>
 
     <div class="layout">
@@ -73,36 +55,11 @@
       </section>
 
       <aside class="sidebar">
-        <div class="panel">
-          <h2>Browse by tag</h2>
-          <p class="panel-note">Documents per tag, from <code>GET /tags/stats</code>. Click to filter.</p>
-          <ul class="tag-list" id="tag-list"></ul>
-        </div>
-        <div class="panel">
-          <h2>Owners with no documents</h2>
-          <p class="panel-note">From <code>GET /owners/inactive</code> (<code>NOT EXISTS</code>).</p>
-          <ul class="owner-list" id="inactive-owners"></ul>
-        </div>
+        <h2>Tags</h2>
+        <ul class="tag-list" id="tag-list"></ul>
       </aside>
     </div>
-
-    <section class="api" id="api">
-      <h2>API</h2>
-      <p>Everything on this page comes from these JSON endpoints.</p>
-      <ul>
-        <li><a href="/search?q=budget&amp;engine=sql"><code>/search?q=budget&amp;engine=sql</code></a> ranked search (<code>engine=sql|cosine</code>, <code>limit</code>, <code>offset</code>)</li>
-        <li><a href="/documents?tags=finance,q4"><code>/documents?tags=finance,q4</code></a> documents with every listed tag</li>
-        <li><a href="/owners/own-1/documents"><code>/owners/own-1/documents</code></a> an owner's 10 most recent documents</li>
-        <li><a href="/tags/stats"><code>/tags/stats</code></a> documents per tag</li>
-        <li><a href="/owners/inactive"><code>/owners/inactive</code></a> owners with no documents</li>
-        <li><a href="/healthz"><code>/healthz</code></a> health check</li>
-      </ul>
-    </section>
   </main>
-
-  <footer class="wrap footer">
-    Node.js · PostgreSQL (Neon) · Render
-  </footer>
 
   <template id="card-template">
     <article class="card">
@@ -111,14 +68,14 @@
         <span class="score" title="Relevance score"></span>
       </div>
       <p class="card-body"></p>
-      <div class="card-meta">
-        <span class="owner"></span>
-        <span class="dot" aria-hidden="true">·</span>
-        <time class="date"></time>
-        <span class="dot" aria-hidden="true">·</span>
-        <span class="doc-id"></span>
+      <div class="card-foot">
+        <div class="card-meta">
+          <span class="owner"></span>
+          <span aria-hidden="true">·</span>
+          <time class="date"></time>
+        </div>
+        <div class="card-tags"></div>
       </div>
-      <div class="card-tags"></div>
     </article>
   </template>
 </body>

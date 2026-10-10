@@ -61,24 +61,31 @@ export async function tagStats(db) {
 // queries.sql #3, generalized from exactly two tags to any number: keep the
 // documents whose matching tag rows number as many as the tags asked for.
 // tagNames must already be de-duplicated, or the count can never match.
-export async function documentsWithAllTags(db, tagNames) {
-  const { rows } = await db.query(
-    `WITH matches AS (
-       SELECT dt.document_id
-       FROM document_tags dt
-       JOIN tags t ON t.id = dt.tag_id
-       WHERE t.name = ANY($1::text[])
-       GROUP BY dt.document_id
-       HAVING COUNT(*) = cardinality($1::text[])
-     )
-     SELECT d.id, d.title, d.body, d.owner_id AS owner, o.name AS owner_name, d.created_at AS created, ${TAGS_OF_D}
-     FROM documents d
-     JOIN owners o ON o.id = d.owner_id
-     JOIN matches m ON m.document_id = d.id
-     ORDER BY d.created_at DESC`,
-    [tagNames],
-  );
-  return rows;
+// Paginated, with the full match count, since a common tag can match
+// thousands of documents.
+const ALL_TAGS_MATCHES = `
+  SELECT dt.document_id
+  FROM document_tags dt
+  JOIN tags t ON t.id = dt.tag_id
+  WHERE t.name = ANY($1::text[])
+  GROUP BY dt.document_id
+  HAVING COUNT(*) = cardinality($1::text[])`;
+
+export async function documentsWithAllTags(db, tagNames, { limit, offset }) {
+  const [page, count] = await Promise.all([
+    db.query(
+      `WITH matches AS (${ALL_TAGS_MATCHES})
+       SELECT d.id, d.title, d.body, d.owner_id AS owner, o.name AS owner_name, d.created_at AS created, ${TAGS_OF_D}
+       FROM documents d
+       JOIN owners o ON o.id = d.owner_id
+       JOIN matches m ON m.document_id = d.id
+       ORDER BY d.created_at DESC, d.id
+       LIMIT $2 OFFSET $3`,
+      [tagNames, limit, offset],
+    ),
+    db.query(`SELECT COUNT(*)::int AS total FROM (${ALL_TAGS_MATCHES}) AS matches`, [tagNames]),
+  ]);
+  return { total: count.rows[0].total, results: page.rows };
 }
 
 // queries.sql #4: owners who have never created a document.

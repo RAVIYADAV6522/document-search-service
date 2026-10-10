@@ -188,8 +188,9 @@ export function createServer({ index, db, log = () => {} }) {
       if (tags.length > MAX_TAGS) {
         return sendJson(res, 400, { error: `at most ${MAX_TAGS} tags are allowed` });
       }
-      const results = await documentsWithAllTags(db, tags);
-      return sendJson(res, 200, { tags, total: results.length, results });
+      const { limit, offset } = parsePagination(url.searchParams);
+      const { total, results } = await documentsWithAllTags(db, tags, { limit, offset });
+      return sendJson(res, 200, { tags, total, limit, offset, results });
     }
 
     return sendJson(res, 404, { error: 'not found' });
