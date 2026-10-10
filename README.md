@@ -1,7 +1,9 @@
 # document-search-service
 
-**Live API:** https://document-search-service-0y08.onrender.com — try [`/search?q=budget&engine=sql`](https://document-search-service-0y08.onrender.com/search?q=budget&engine=sql)
-or [`/documents?tags=finance,q4`](https://document-search-service-0y08.onrender.com/documents?tags=finance,q4).
+**Live demo:** [document-search-service-0y08.onrender.com](https://document-search-service-0y08.onrender.com) — a search page where you can type a keyword,
+switch between the two search engines, compare them side by side, and browse by tag.
+**API:** [`/search?q=budget&engine=sql`](https://document-search-service-0y08.onrender.com/search?q=budget&engine=sql) ·
+[`/documents?tags=finance,q4`](https://document-search-service-0y08.onrender.com/documents?tags=finance,q4) · [all endpoints](#api)
 (Free hosting: the first request after a quiet spell can take up to a minute while the server wakes up.)
 
 A document search API on **PostgreSQL**: a normalized schema with versioned migrations,
@@ -12,9 +14,10 @@ approaches can be compared on the same data.
 | | |
 |---|---|
 | **Runtime** | Node.js 22, standard library HTTP server (`node:http`) |
+| **Frontend** | One page of plain HTML/CSS/JS served by the same server, no framework or build step |
 | **Database** | PostgreSQL 16 (Neon in production, Docker locally), `pg` driver |
 | **Search** | `engine=sql`: `tsvector` + GIN index + `ts_rank` · `engine=cosine`: hand-rolled bag-of-words cosine similarity |
-| **Tests** | `node:test`, 40 tests, including integration tests against a real Postgres |
+| **Tests** | `node:test`, 43 tests, including integration tests against a real Postgres |
 | **Deploy** | Render (web service) + Neon (Postgres) |
 | **Dependencies** | One: `pg` |
 
@@ -47,6 +50,7 @@ All endpoints are `GET` and return JSON.
 
 | Endpoint | What it does | SQL technique |
 |---|---|---|
+| `/` | The search page (HTML) | Calls the endpoints below |
 | `/search?q=<text>&engine=cosine\|sql&limit=&offset=` | Ranked search, paginated | Full-text search (`@@`, `ts_rank`) or in-memory cosine |
 | `/owners/:id/documents` | An owner's 10 most recent documents | Composite index `(owner_id, created_at DESC)` |
 | `/tags/stats` | How many documents carry each tag | `LEFT JOIN` + `GROUP BY` |
@@ -112,8 +116,12 @@ document-search-service/
 ├── scripts/
 │   ├── migrate.js               applies pending migrations, tracked in schema_migrations
 │   └── seed.js                  loads documents.json (idempotent, one transaction)
+├── public/
+│   ├── index.html               search page: search box, engine toggle, results, tag sidebar
+│   ├── app.js                   page logic (plain DOM, renders text via textContent only)
+│   └── styles.css               light/dark, responsive down to phone width
 ├── src/
-│   ├── server.js                HTTP routes, validation, errors, logging, shutdown
+│   ├── server.js                HTTP routes, static page, validation, errors, logging, shutdown
 │   ├── repository.js            every SQL statement the service runs
 │   ├── db.js                    connection pool (timeouts, idle-error handling)
 │   ├── ranker.js                builds the cosine index, ranks documents
@@ -123,7 +131,7 @@ document-search-service/
 │   └── loader.js                reads documents.json for the seed
 ├── test/
 │   ├── api.test.js              integration tests against real Postgres
-│   ├── server.test.js           HTTP behaviour with fake databases
+│   ├── server.test.js           HTTP behaviour and static files, with fake databases
 │   ├── ranker.test.js
 │   └── similarity.test.js
 ├── queries.sql                  the original four queries, annotated
@@ -142,7 +150,7 @@ docker run -d --name dss-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=docsear
 cp .env.example .env
 npm install
 npm run db:setup   # apply migrations + seed documents.json
-npm run dev        # http://localhost:3000
+npm run dev        # search page at http://localhost:3000
 npm test           # integration tests run when DATABASE_URL is set
 ```
 
