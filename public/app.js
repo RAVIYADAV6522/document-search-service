@@ -153,7 +153,7 @@ async function run() {
 
   if (!state.q && !state.tag) {
     $('results').replaceChildren(
-      el('div', { className: 'empty' }, 'Type a keyword above, pick a suggestion, or click a tag to browse.'),
+      el('div', { className: 'empty' }, 'Type a keyword and press Enter, pick a suggestion, or click a tag to browse.'),
     );
     $('pager').hidden = true;
     setStatus('');
@@ -307,33 +307,31 @@ async function loadSidebar() {
 
 // ---- wiring ----
 
-let debounce;
-$('q').addEventListener('input', () => {
-  clearTimeout(debounce);
-  debounce = setTimeout(() => {
-    state.q = $('q').value.trim();
-    state.tag = '';
-    state.page = 0;
-    run();
-  }, 300);
-});
-
-$('search-form').addEventListener('submit', (e) => {
-  e.preventDefault();
-  clearTimeout(debounce);
+// Search runs on Enter or the Search button, not on every keystroke, so a
+// half-typed word never flashes "no matches". Clearing the box resets.
+function searchFromBox() {
   state.q = $('q').value.trim();
   state.tag = '';
   state.page = 0;
   run();
+}
+
+$('search-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  searchFromBox();
+});
+
+$('q').addEventListener('input', () => {
+  if ($('q').value === '' && (state.q || state.tag)) searchFromBox();
 });
 
 $('engine').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-engine]');
   if (!btn) return;
   state.engine = btn.dataset.engine;
-  state.page = 0;
-  if (state.tag) state.tag = '';
-  run();
+  // Use whatever is in the box, even if it hasn't been submitted yet.
+  if ($('q').value.trim()) searchFromBox();
+  else run();
 });
 
 $('prev').addEventListener('click', () => {
