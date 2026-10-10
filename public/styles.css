@@ -1,38 +1,22 @@
 :root {
-  --bg: #f7f8fa;
+  /* Rosé Quartz: blush white with dusty rose. A single light look on every
+     device, regardless of the system dark-mode setting. */
+  --bg: #fbf8f8;
   --surface: #ffffff;
-  --surface-2: #f1f3f6;
-  --border: #e4e7ec;
-  --text: #15181e;
-  --muted: #667085;
-  --accent: #2563eb;
-  --accent-soft: #eaf0ff;
-  --accent-text: #1d4ed8;
-  --mark: #fff0b3;
-  --mark-text: #3d2f00;
+  --surface-2: #f6eeee;
+  --border: #ecdddd;
+  --text: #2a1d20;
+  --muted: #7b6669;
+  --accent: #b4526a;
+  --accent-soft: #f8e7eb;
+  --accent-text: #94364f;
+  --on-accent: #ffffff;
+  --mark: #fadde4;
+  --mark-text: #5a1428;
   --danger: #b42318;
-  --shadow: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow: 0 1px 2px rgb(42 29 32 / 0.06);
   --radius: 12px;
   color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0d1015;
-    --surface: #151a21;
-    --surface-2: #1c222b;
-    --border: #262d38;
-    --text: #e7eaef;
-    --muted: #8f99a8;
-    --accent: #5b8cff;
-    --accent-soft: #1a2647;
-    --accent-text: #a3bdff;
-    --mark: #4a3d0a;
-    --mark-text: #ffe9a3;
-    --danger: #ff8a80;
-    --shadow: none;
-    color-scheme: dark;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -62,7 +46,7 @@ button { font: inherit; cursor: pointer; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; color: var(--text); text-decoration: none; }
 .brand-mark { width: 24px; height: 24px; }
 .brand-mark rect { fill: var(--accent); }
-.brand-mark circle, .brand-mark path { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; }
+.brand-mark circle, .brand-mark path { fill: none; stroke: var(--on-accent); stroke-width: 3; stroke-linecap: round; }
 .toplink { color: var(--muted); text-decoration: none; font-size: 14px; }
 .toplink:hover { color: var(--text); }
 
@@ -81,8 +65,14 @@ button { font: inherit; cursor: pointer; }
   font: inherit; font-size: 17px; padding: 9px 0;
 }
 .searchbar input::placeholder { color: var(--muted); }
+/* Browsers draw their own clear (x) button in search boxes; redraw it in
+   the theme's rose instead of the browser's default blue. */
+.searchbar input::-webkit-search-cancel-button {
+  -webkit-appearance: none; appearance: none; width: 16px; height: 16px; cursor: pointer;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 4l8 8M12 4l-8 8' stroke='%23b4526a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 .searchbar button {
-  border: 0; border-radius: 10px; background: var(--accent); color: #fff;
+  border: 0; border-radius: 10px; background: var(--accent); color: var(--on-accent);
   padding: 10px 20px; font-weight: 600;
 }
 .searchbar button:hover { filter: brightness(1.08); }
