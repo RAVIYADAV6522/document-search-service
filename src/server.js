@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { URL } from 'node:url';
-import { loadDocuments } from './loader.js';
+import { createPool } from './db.js';
+import { listDocuments } from './repository.js';
 import { buildIndex, rankDocuments } from './ranker.js';
 
 const DEFAULT_LIMIT = 20;
@@ -64,7 +65,8 @@ export function createServer(index) {
 }
 
 async function main() {
-  const documents = await loadDocuments();
+  const pool = createPool();
+  const documents = await listDocuments(pool);
   const index = buildIndex(documents);
   const server = createServer(index);
   server.listen(PORT, () => {

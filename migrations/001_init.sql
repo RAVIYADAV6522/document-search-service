@@ -1,4 +1,8 @@
--- Schema for the document search service. Written for PostgreSQL.
+-- Initial schema for the document search service. Written for PostgreSQL.
+--
+-- Primary keys are TEXT so the readable ids from documents.json (own-1,
+-- doc-001) survive seeding and show up unchanged in API responses. Rows
+-- created without an explicit id still get a random UUID as their id.
 --
 -- Tags are normalized into their own table plus a document_tags join table,
 -- rather than stored as a text[] column on documents. That is a deliberate
@@ -8,17 +12,17 @@
 -- reasoning.
 
 CREATE TABLE owners (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     name       TEXT NOT NULL,
     email      TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE documents (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     title      TEXT NOT NULL,
     body       TEXT NOT NULL,
-    owner_id   UUID NOT NULL REFERENCES owners(id),
+    owner_id   TEXT NOT NULL REFERENCES owners(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -28,7 +32,7 @@ CREATE TABLE tags (
 );
 
 CREATE TABLE document_tags (
-    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     tag_id      INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
     PRIMARY KEY (document_id, tag_id)
 );

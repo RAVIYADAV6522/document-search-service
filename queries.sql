@@ -1,5 +1,5 @@
 -- Queries for the document search service. Written for PostgreSQL,
--- against the schema in schema.sql. $1, $2, ... are bind parameters.
+-- against the schema in migrations/. $1, $2, ... are bind parameters.
 
 -- 1. The 10 most recent documents belonging to one owner.
 SELECT d.id, d.title, d.body, d.owner_id, d.created_at

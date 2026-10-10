@@ -1,16 +1,23 @@
 {
   "name": "document-search-service",
   "version": "1.0.0",
-  "description": "Retrieval core of a tiny internal document search tool.",
+  "description": "Document search API on PostgreSQL: SQL queries, full-text search, and a from-scratch cosine-similarity ranker.",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test"
+    "dev": "node --env-file-if-exists=.env src/server.js",
+    "migrate": "node --env-file-if-exists=.env scripts/migrate.js",
+    "seed": "node --env-file-if-exists=.env scripts/seed.js",
+    "db:setup": "npm run migrate && npm run seed",
+    "test": "node --env-file-if-exists=.env --test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "license": "UNLICENSED",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
 }
