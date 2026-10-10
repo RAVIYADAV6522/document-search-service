@@ -18,7 +18,7 @@ approaches can be compared on the same data.
 | **Database** | PostgreSQL 16 (Neon in production, Docker locally), `pg` driver |
 | **Search** | `engine=sql`: `tsvector` + GIN index + `ts_rank` · `engine=cosine`: hand-rolled bag-of-words cosine similarity |
 | **Data** | 10,000 documents from 25 owners: 28 hand-written plus 9,972 generated deterministically |
-| **Tests** | `node:test`, 49 tests, including integration tests against a real Postgres |
+| **Tests** | `node:test`, 50 tests, including integration tests against a real Postgres |
 | **Deploy** | Render (web service) + Neon (Postgres) |
 | **Dependencies** | One: `pg` |
 
@@ -55,7 +55,7 @@ All endpoints are `GET` and return JSON.
 | `/search?q=<text>&engine=cosine\|sql&limit=&offset=` | Ranked search, paginated | Full-text search (`@@`, `ts_rank`) or in-memory cosine |
 | `/owners/:id/documents` | An owner's 10 most recent documents | Composite index `(owner_id, created_at DESC)` |
 | `/tags/stats` | How many documents carry each tag | `LEFT JOIN` + `GROUP BY` |
-| `/documents?tags=finance,q4` | Documents that have **every** listed tag | Relational division: `HAVING COUNT(*) = n` |
+| `/documents?tags=finance,q4&limit=&offset=` | Documents that have **every** listed tag, paginated | Relational division: `HAVING COUNT(*) = n` |
 | `/owners/inactive` | Owners who have never created a document | Anti-join: `NOT EXISTS` |
 | `/healthz` | Liveness + database check | `SELECT 1` |
 
@@ -130,7 +130,7 @@ document-search-service/
 │   ├── generate.js              deterministic generator for the other 9,972 documents
 │   └── seed.js                  loads documents.json (idempotent, one transaction)
 ├── public/
-│   ├── index.html               search page: search box, engine toggle, results, tag sidebar
+│   ├── index.html               search page: search box, engine switch, results, tag sidebar
 │   ├── app.js                   page logic (plain DOM, renders text via textContent only)
 │   └── styles.css               light/dark, responsive down to phone width
 ├── src/

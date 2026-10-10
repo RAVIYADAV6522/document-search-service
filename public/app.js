@@ -4,13 +4,9 @@
 
 const PAGE_SIZE = 10;
 const SLOW_MS = 2500; // after this, explain that the free server may be waking up
-const SUGGESTIONS = ['budget', 'search ranking', '"latency spike"', 'finance -audit', 'roadmap', 'budgets'];
-const ENGINE_HINTS = {
-  sql: 'Matches every word, understands word forms ("budgets" finds "budget"), skips stop words, supports "phrases" and -exclusions.',
-  cosine: 'Matches any word exactly and scores by cosine similarity of word counts. Written from scratch in JavaScript.',
-  compare: 'Runs both engines on the same query so you can see where they agree and differ.',
-};
-const ENGINE_LABELS = { sql: 'PostgreSQL full-text', cosine: 'Cosine (from scratch)' };
+const SUGGESTIONS = ['budget', 'q2', '"latency spike"', 'finance -audit', 'roadmap'];
+const ENGINE_LABELS = { sql: 'SQL', cosine: 'Cosine' };
+const TAGS_COLLAPSED = 12;
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -18,6 +14,10 @@ const el = (tag, props = {}, ...children) => {
   node.append(...children);
   return node;
 };
+const fmt = (n) => n.toLocaleString('en-US');
+const plural = (n, word) => `${fmt(n)} ${word}${n === 1 ? '' : 's'}`;
+const seconds = (ms) => `${(ms / 1000).toFixed(2)} s`;
+const dateFormat = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
 const state = { q: '', engine: 'sql', page: 0, tag: '' };
 let inflight = null;
@@ -38,8 +38,8 @@ function writeUrl() {
   else if (state.q) {
     p.set('q', state.q);
     p.set('engine', state.engine);
-    if (state.page) p.set('page', state.page);
   }
+  if ((state.tag || state.q) && state.page) p.set('page', state.page);
   const qs = p.toString();
   history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
 }
@@ -85,9 +85,6 @@ function highlighted(text, pattern) {
   return frag;
 }
 
-const fmt = (n) => (typeof n === 'number' ? n.toLocaleString('en-US') : n);
-const dateFormat = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-
 function card(doc, pattern) {
   const node = $('card-template').content.firstElementChild.cloneNode(true);
   node.querySelector('.card-title').append(highlighted(doc.title, pattern));
@@ -99,32 +96,23 @@ function card(doc, pattern) {
   const time = node.querySelector('.date');
   time.dateTime = doc.created;
   time.textContent = dateFormat.format(new Date(doc.created));
-  node.querySelector('.doc-id').textContent = doc.id;
   const tags = node.querySelector('.card-tags');
   for (const tag of doc.tags) {
-    tags.append(el('button', { type: 'button', className: 'tag', textContent: `#${tag}`, onclick: () => showTag(tag) }));
+    tags.append(el('button', { type: 'button', className: 'tag', textContent: tag, onclick: () => showTag(tag) }));
   }
   return node;
 }
 
 function cardList(docs, pattern) {
-  if (docs.length === 0) {
-    return el('div', { className: 'empty', textContent: 'No documents match. Try another word, or switch engine.' });
-  }
+  if (docs.length === 0) return el('div', { className: 'empty', textContent: 'No documents match.' });
   const frag = document.createDocumentFragment();
   for (const doc of docs) frag.append(card(doc, pattern));
   return frag;
 }
 
-function setStatus(content, isError = false) {
-  const status = $('status');
-  status.className = isError ? 'status error' : 'status';
-  status.replaceChildren(...[content].flat());
-}
-
-function setStats({ matches = '–', ms = null } = {}) {
-  $('stat-matches').textContent = fmt(matches);
-  $('stat-time').textContent = ms === null ? '–' : `${ms} ms`;
+function setStatus(...content) {
+  $('status').className = 'status';
+  $('status').replaceChildren(...content);
 }
 
 function showSkeleton(count = 3) {
@@ -137,10 +125,23 @@ function syncControls() {
   for (const btn of $('engine').querySelectorAll('button')) {
     btn.setAttribute('aria-checked', String(btn.dataset.engine === state.engine));
   }
-  $('engine-hint').textContent = ENGINE_HINTS[state.engine];
   for (const row of document.querySelectorAll('.tag-row')) {
     row.setAttribute('aria-pressed', String(row.dataset.tag === state.tag));
   }
+}
+
+function runQuery(q) {
+  state.q = q;
+  state.tag = '';
+  state.page = 0;
+  run();
+}
+
+function welcome() {
+  const chips = SUGGESTIONS.map((s) =>
+    el('button', { type: 'button', className: 'chip', textContent: s, onclick: () => runQuery(s) }),
+  );
+  return el('div', { className: 'welcome' }, el('p', { textContent: 'Try a search' }), el('div', { className: 'chips' }, ...chips));
 }
 
 // ---- views ----
@@ -153,52 +154,39 @@ async function run() {
   const { signal } = inflight;
 
   if (!state.q && !state.tag) {
-    $('results').replaceChildren(
-      el('div', { className: 'empty' }, 'Type a keyword and press Enter, pick a suggestion, or click a tag to browse.'),
-    );
+    $('results').replaceChildren(welcome());
     $('pager').hidden = true;
-    setStatus('');
-    setStats();
+    setStatus();
     return;
   }
 
   showSkeleton();
   setStatus('Searching…');
   const slow = setTimeout(() => {
-    setStatus('Waking up the server (free hosting sleeps when idle). This can take up to a minute the first time…');
+    setStatus('Waking up the server, this can take up to a minute…');
   }, SLOW_MS);
   const started = performance.now();
 
   try {
-    if (state.tag) await renderTag(signal);
-    else if (state.engine === 'compare') await renderCompare(signal);
-    else await renderSearch(signal);
-    setStats({ ...lastStats, ms: Math.round(performance.now() - started) });
+    let summary;
+    if (state.tag) summary = await renderTag(signal);
+    else if (state.engine === 'compare') summary = await renderCompare(signal);
+    else summary = await renderSearch(signal);
+    setStatus(...summary, el('span', { className: 'muted', textContent: ` (${seconds(performance.now() - started)})` }));
   } catch (err) {
     if (err.name === 'AbortError') return;
     $('results').replaceChildren();
     $('pager').hidden = true;
-    setStatus(`Something went wrong: ${err.message}`, true);
-    setStats();
+    setStatus(`Something went wrong: ${err.message}`);
+    $('status').className = 'status error';
   } finally {
     clearTimeout(slow);
   }
 }
 
-let lastStats = {};
-
 async function renderSearch(signal) {
   const params = new URLSearchParams({ q: state.q, engine: state.engine, limit: PAGE_SIZE, offset: state.page * PAGE_SIZE });
   const data = await api(`/search?${params}`, signal);
-  lastStats = { matches: data.total };
-
-  const from = data.total === 0 ? 0 : data.offset + 1;
-  const to = data.offset + data.results.length;
-  setStatus([
-    el('strong', { textContent: `${fmt(data.total)} ${data.total === 1 ? 'match' : 'matches'}` }),
-    ` for “${data.query}” · ${ENGINE_LABELS[data.engine]}`,
-    data.total > PAGE_SIZE ? ` · showing ${fmt(from)}–${fmt(to)}` : '',
-  ]);
   $('results').replaceChildren(cardList(data.results, highlightPattern(state.q)));
 
   const pages = Math.ceil(data.total / PAGE_SIZE);
@@ -206,42 +194,41 @@ async function renderSearch(signal) {
   $('page-info').textContent = `Page ${fmt(state.page + 1)} of ${fmt(pages)}`;
   $('prev').disabled = state.page === 0;
   $('next').disabled = state.page >= pages - 1;
+  return [el('strong', { textContent: plural(data.total, 'result') })];
 }
 
 async function renderCompare(signal) {
-  const query = (engine) =>
-    api(`/search?${new URLSearchParams({ q: state.q, engine, limit: PAGE_SIZE })}`, signal);
+  const query = (engine) => api(`/search?${new URLSearchParams({ q: state.q, engine, limit: PAGE_SIZE })}`, signal);
   const [sql, cosine] = await Promise.all([query('sql'), query('cosine')]);
-  lastStats = { matches: `${fmt(sql.total)} / ${fmt(cosine.total)}` };
-
   const pattern = highlightPattern(state.q);
   const column = (data) =>
     el(
       'div',
       { className: 'column' },
-      el('h2', {}, ENGINE_LABELS[data.engine], el('span', { textContent: `${fmt(data.total)} matches` })),
+      el('h2', {}, ENGINE_LABELS[data.engine], el('span', { textContent: plural(data.total, 'result') })),
       cardList(data.results, pattern),
     );
-  setStatus([
-    el('strong', { textContent: 'Comparing engines' }),
-    ` for “${state.q}”: top ${PAGE_SIZE} from each.`,
-  ]);
   $('results').replaceChildren(el('div', { className: 'columns' }, column(sql), column(cosine)));
   $('pager').hidden = true;
+  return [el('strong', { textContent: 'Top 10 from each engine' })];
 }
 
 async function renderTag(signal) {
-  const data = await api(`/documents?${new URLSearchParams({ tags: state.tag })}`, signal);
-  lastStats = { matches: data.total };
-  setStatus([
-    el('strong', { textContent: `${fmt(data.total)} ${data.total === 1 ? 'document' : 'documents'}` }),
-    ' tagged ',
-    el('code', { textContent: `#${state.tag}` }),
-    ', newest first · ',
-    el('button', { type: 'button', className: 'show-more', textContent: 'Clear filter', onclick: clearTag }),
-  ]);
+  const params = new URLSearchParams({ tags: state.tag, limit: PAGE_SIZE, offset: state.page * PAGE_SIZE });
+  const data = await api(`/documents?${params}`, signal);
   $('results').replaceChildren(cardList(data.results, null));
-  $('pager').hidden = true;
+
+  const pages = Math.ceil(data.total / PAGE_SIZE);
+  $('pager').hidden = pages <= 1;
+  $('page-info').textContent = `Page ${fmt(state.page + 1)} of ${fmt(pages)}`;
+  $('prev').disabled = state.page === 0;
+  $('next').disabled = state.page >= pages - 1;
+  return [
+    el('span', { className: 'tag-pill', textContent: state.tag }),
+    ' ',
+    el('strong', { textContent: plural(data.total, 'document') }),
+    el('button', { type: 'button', className: 'link', textContent: 'Clear', onclick: clearTag }),
+  ];
 }
 
 function showTag(tag) {
@@ -249,11 +236,12 @@ function showTag(tag) {
   state.q = '';
   state.page = 0;
   run();
-  $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('status').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function clearTag() {
   state.tag = '';
+  state.page = 0;
   run();
 }
 
@@ -261,13 +249,8 @@ function clearTag() {
 
 async function loadSidebar() {
   try {
-    const [health, stats, inactive] = await Promise.all([
-      api('/healthz'),
-      api('/tags/stats'),
-      api('/owners/inactive'),
-    ]);
-    $('stat-docs').textContent = fmt(health.documents);
-    $('stat-tags').textContent = stats.results.length;
+    const [health, stats] = await Promise.all([api('/healthz'), api('/tags/stats')]);
+    $('library-meta').textContent = `${plural(health.documents, 'document')} · ${plural(stats.results.length, 'tag')}`;
 
     const max = Math.max(...stats.results.map((t) => t.document_count), 1);
     const rows = stats.results.map(({ tag, document_count: count }) => {
@@ -276,7 +259,7 @@ async function loadSidebar() {
       const btn = el(
         'button',
         { type: 'button', className: 'tag-row', onclick: () => showTag(tag) },
-        el('span', { textContent: `#${tag}` }),
+        el('span', { textContent: tag }),
         el('span', { className: 'tag-count', textContent: fmt(count) }),
         el('span', { className: 'bar' }, bar),
       );
@@ -284,25 +267,19 @@ async function loadSidebar() {
       return el('li', {}, btn);
     });
     const list = $('tag-list');
-    const COLLAPSED = 10;
-    list.replaceChildren(...rows.slice(0, COLLAPSED));
-    if (rows.length > COLLAPSED) {
-      const more = el('button', { type: 'button', className: 'show-more', textContent: `Show all ${rows.length} tags` });
+    list.replaceChildren(...rows.slice(0, TAGS_COLLAPSED));
+    if (rows.length > TAGS_COLLAPSED) {
+      const more = el('button', { type: 'button', className: 'link', textContent: `Show all ${rows.length}` });
       more.onclick = () => {
         list.replaceChildren(...rows);
         more.remove();
+        syncControls();
       };
       list.after(more);
     }
-
-    $('inactive-owners').replaceChildren(
-      ...(inactive.results.length
-        ? inactive.results.map((o) => el('li', {}, o.name, el('small', { textContent: `${o.id} · ${o.email}` })))
-        : [el('li', { textContent: 'Every owner has at least one document.' })]),
-    );
     syncControls();
   } catch {
-    $('tag-list').replaceChildren(el('li', { className: 'panel-note', textContent: 'Could not load tags.' }));
+    $('tag-list').replaceChildren(el('li', { className: 'muted', textContent: 'Could not load tags.' }));
   }
 }
 
@@ -310,20 +287,13 @@ async function loadSidebar() {
 
 // Search runs on Enter or the Search button, not on every keystroke, so a
 // half-typed word never flashes "no matches". Clearing the box resets.
-function searchFromBox() {
-  state.q = $('q').value.trim();
-  state.tag = '';
-  state.page = 0;
-  run();
-}
-
 $('search-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  searchFromBox();
+  runQuery($('q').value.trim());
 });
 
 $('q').addEventListener('input', () => {
-  if ($('q').value === '' && (state.q || state.tag)) searchFromBox();
+  if ($('q').value === '' && (state.q || state.tag)) runQuery('');
 });
 
 $('engine').addEventListener('click', (e) => {
@@ -331,33 +301,21 @@ $('engine').addEventListener('click', (e) => {
   if (!btn) return;
   state.engine = btn.dataset.engine;
   // Use whatever is in the box, even if it hasn't been submitted yet.
-  if ($('q').value.trim()) searchFromBox();
+  const typed = $('q').value.trim();
+  if (typed) runQuery(typed);
   else run();
 });
 
 $('prev').addEventListener('click', () => {
   state.page = Math.max(0, state.page - 1);
   run();
+  $('status').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 $('next').addEventListener('click', () => {
   state.page += 1;
   run();
+  $('status').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
-
-for (const s of SUGGESTIONS) {
-  $('suggestions').append(
-    el('button', {
-      type: 'button',
-      textContent: s,
-      onclick: () => {
-        state.q = s;
-        state.tag = '';
-        state.page = 0;
-        run();
-      },
-    }),
-  );
-}
 
 readUrl();
 run();

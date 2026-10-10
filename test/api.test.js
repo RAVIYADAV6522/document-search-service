@@ -178,3 +178,14 @@ test('full-text search is answered by the GIN index', { skip }, async () => {
     client.release();
   }
 });
+
+test('GET /documents?tags= paginates and reports the full total', { skip }, async () => {
+  const first = await get('/documents?tags=engineering&limit=4');
+  assert.equal(first.body.total, 10);
+  assert.equal(first.body.results.length, 4);
+  const last = await get('/documents?tags=engineering&limit=4&offset=8');
+  assert.equal(last.body.total, 10);
+  assert.equal(last.body.results.length, 2);
+  const ids = [...first.body.results, ...last.body.results].map((d) => d.id);
+  assert.equal(new Set(ids).size, ids.length, 'pages must not overlap');
+});
