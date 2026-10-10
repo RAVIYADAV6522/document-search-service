@@ -1,0 +1,18 @@
+# Render Blueprint. Creates the web service; DATABASE_URL is entered in the
+# dashboard on first deploy (sync: false keeps it out of this file).
+services:
+  - type: web
+    name: document-search-service
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    # Free instances have no pre-deploy step, so pending migrations run just
+    # before the server starts. migrate.js is a no-op when up to date.
+    startCommand: npm run migrate && npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false
