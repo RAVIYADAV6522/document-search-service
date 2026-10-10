@@ -17,7 +17,8 @@ approaches can be compared on the same data.
 | **Frontend** | One page of plain HTML/CSS/JS served by the same server, no framework or build step |
 | **Database** | PostgreSQL 16 (Neon in production, Docker locally), `pg` driver |
 | **Search** | `engine=sql`: `tsvector` + GIN index + `ts_rank` · `engine=cosine`: hand-rolled bag-of-words cosine similarity |
-| **Tests** | `node:test`, 43 tests, including integration tests against a real Postgres |
+| **Data** | 10,000 documents from 25 owners: 28 hand-written plus 9,972 generated deterministically |
+| **Tests** | `node:test`, 49 tests, including integration tests against a real Postgres |
 | **Deploy** | Render (web service) + Neon (Postgres) |
 | **Dependencies** | One: `pg` |
 
@@ -74,13 +75,13 @@ $ curl 'https://document-search-service-0y08.onrender.com/search?q=search%20rank
 {
   "query": "search ranking",
   "engine": "cosine",
-  "total": 17,
+  "total": 1867,
   "limit": 1,
   "offset": 0,
   "results": [
-    { "id": "doc-020", "title": "Search Relevance Tuning Notes", "body": "...",
-      "owner": "own-2", "created": "2026-06-30T15:00:00.000Z",
-      "tags": ["engineering", "ranking", "search"], "score": 0.3536 }
+    { "id": "doc-04731", "title": "Ranking Change Proposal: dark mode", "body": "...",
+      "owner": "own-18", "owner_name": "Sofia Haddad", "created": "2026-06-23T13:23:00.000Z",
+      "tags": ["engineering", "ranking", "search"], "score": 0.465 }
   ]
 }
 ```
@@ -89,19 +90,30 @@ $ curl 'https://document-search-service-0y08.onrender.com/search?q=search%20rank
 
 ## Comparing the engines
 
-The same queries against the 28 sample documents:
+The same queries against the 10,000 documents:
 
 | Query | `engine=cosine` | `engine=sql` | Why |
 |---|---|---|---|
-| `search ranking` | 17 results | 5 results | Cosine matches *any* query word; full-text search requires *all* of them. |
-| `budgets` | 0 results | 4 results | Postgres stems "budgets" to "budget"; cosine needs the exact word. |
-| `the` | 24 results | 0 results | Postgres drops stop words; cosine scores them like any other word. |
-| `"latency spike"` | 1 result | 1 result | Postgres treats the quotes as a phrase. |
-| `finance -audit` | 8 results | 6 results | Postgres supports `-word` exclusion. |
+| `search ranking` | 1,867 results | 624 results | Cosine matches *any* query word; full-text search requires *all* of them. |
+| `budgets` | 0 results | 716 results | Postgres stems "budgets" to "budget"; cosine needs the exact word. |
+| `the` | 9,742 results | 0 results | Postgres drops stop words; cosine scores them like any other word. |
+| `"latency spike"` | 1,198 results | 262 results | Postgres treats the quotes as a phrase; cosine matches either word anywhere. |
+| `finance -audit` | 2,135 results | 618 results | Postgres supports `-word` exclusion. |
+
+**Do the indexes matter?** `EXPLAIN ANALYZE` on the 10,000 rows (local Postgres 16):
+
+| Query | With index | Index disabled |
+|---|---|---|
+| Full-text search for a rare word (`sharding`) | 0.026 ms, GIN bitmap index scan | 2.29 ms, sequential scan |
+| An owner's 10 most recent documents | 0.072 ms, `idx_documents_owner_created` | 2.41 ms, sequential scan + sort |
+| Full-text search for a common word (356 matches) | sequential scan, 2.3 ms | (same) |
+
+The last row is the planner choosing correctly: when a term matches a large share of
+rows, reading the table is cheaper than going through the index, so Postgres skips it.
 
 **Trade-offs.** Cosine similarity gives full control over scoring and handles partial
-matches, but ranks every document in application memory on each request and only sees
-data loaded at startup. Postgres full-text search uses an index, stays in sync with the
+matches, but scores every document in application memory on each request (time grows
+linearly with the number of documents) and only sees data loaded at startup. Postgres full-text search uses an index, stays in sync with the
 data automatically, and understands word forms, at the cost of less control over the
 ranking formula (for example, `ts_rank` scores queries with `-exclusions` as 0, so those
 results fall back to newest-first).
@@ -115,6 +127,7 @@ document-search-service/
 │   └── 002_full_text_search.sql generated tsvector column + GIN index
 ├── scripts/
 │   ├── migrate.js               applies pending migrations, tracked in schema_migrations
+│   ├── generate.js              deterministic generator for the other 9,972 documents
 │   └── seed.js                  loads documents.json (idempotent, one transaction)
 ├── public/
 │   ├── index.html               search page: search box, engine toggle, results, tag sidebar
@@ -135,7 +148,7 @@ document-search-service/
 │   ├── ranker.test.js
 │   └── similarity.test.js
 ├── queries.sql                  the original four queries, annotated
-├── documents.json               sample dataset (28 documents, 5 owners)
+├── documents.json               28 hand-written documents and 5 owners
 ├── render.yaml                  Render deployment blueprint
 └── NOTES.md                     design reasoning, assumptions, EXPLAIN analysis
 ```
@@ -149,7 +162,8 @@ docker run -d --name dss-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=docsear
   -p 5433:5432 postgres:16
 cp .env.example .env
 npm install
-npm run db:setup   # apply migrations + seed documents.json
+npm run db:setup   # apply migrations + seed the 28 hand-written documents
+npm run seed -- --total=10000   # optional: add generated documents up to 10,000
 npm run dev        # search page at http://localhost:3000
 npm test           # integration tests run when DATABASE_URL is set
 ```
@@ -157,7 +171,7 @@ npm test           # integration tests run when DATABASE_URL is set
 ## Deployment
 
 - **Database:** Neon Postgres. Migrations run automatically on each deploy; seed once
-  with `node --env-file=.env.neon scripts/seed.js`.
+  with `node --env-file=.env.neon scripts/seed.js --total=10000`.
 - **API:** Render web service from [`render.yaml`](./render.yaml), with `DATABASE_URL` set
   in the dashboard and the health check pointed at `/healthz`.
 

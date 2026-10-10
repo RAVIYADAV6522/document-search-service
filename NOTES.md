@@ -199,3 +199,24 @@ the way:
 - **The cosine index is built once at startup** from the database. Documents added
   later are visible to `engine=sql` immediately but to `engine=cosine` only after a
   restart, an accepted limitation for an in-memory index.
+
+## Later: growing the dataset to 10,000 documents
+
+With 28 rows every query is a sequential scan, because reading the whole table is cheaper
+than using any index, so the indexes couldn't be shown to matter. `scripts/generate.js`
+adds 9,972 documents from per-department templates, using a fixed-seed PRNG so the same
+documents come out every time (re-seeding is idempotent and local matches production).
+The 28 hand-written documents are unchanged, and `own-5` still has no documents.
+
+Measured with `EXPLAIN ANALYZE` on Postgres 16 at 10,000 rows:
+
+- Full-text search for a rare term uses the GIN index: 0.026 ms, versus 2.29 ms when
+  index scans are disabled.
+- An owner's 10 most recent documents use `(owner_id, created_at DESC)`: 0.072 ms,
+  versus 2.41 ms as a sequential scan plus sort.
+- Full-text search for a common term (hundreds of matches) still uses a sequential
+  scan. That is the planner's correct choice, not a missing index.
+
+The cosine engine scales linearly: it scores every document on each request. In a local
+benchmark it took ~1 ms at 1,000 documents, ~12 ms at 10,000 and ~130 ms at 100,000.
+10,000 keeps it responsive on Render's free instance.
