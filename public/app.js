@@ -103,8 +103,23 @@ function card(doc, pattern) {
   return node;
 }
 
-function cardList(docs, pattern) {
-  if (docs.length === 0) return el('div', { className: 'empty', textContent: 'No documents match.' });
+function suggestionChips() {
+  return SUGGESTIONS.map((s) =>
+    el('button', { type: 'button', className: 'chip', textContent: s, onclick: () => runQuery(s) }),
+  );
+}
+
+// The "nothing found" state: an animated magnifying glass (static SVG from
+// index.html) plus the query, which is set with textContent like all data.
+function nothingFound(query) {
+  const node = $('empty-template').content.firstElementChild.cloneNode(true);
+  node.querySelector('.nothing-title').textContent = query ? `Nothing found for “${query}”` : 'Nothing found';
+  node.querySelector('.chips').append(...suggestionChips().filter((c) => c.textContent !== query).slice(0, 3));
+  return node;
+}
+
+function cardList(docs, pattern, query = '') {
+  if (docs.length === 0) return nothingFound(query);
   const frag = document.createDocumentFragment();
   for (const doc of docs) frag.append(card(doc, pattern));
   return frag;
@@ -138,10 +153,7 @@ function runQuery(q) {
 }
 
 function welcome() {
-  const chips = SUGGESTIONS.map((s) =>
-    el('button', { type: 'button', className: 'chip', textContent: s, onclick: () => runQuery(s) }),
-  );
-  return el('div', { className: 'welcome' }, el('p', { textContent: 'Try a search' }), el('div', { className: 'chips' }, ...chips));
+  return el('div', { className: 'welcome' }, el('p', { textContent: 'Try a search' }), el('div', { className: 'chips' }, ...suggestionChips()));
 }
 
 // ---- views ----
@@ -187,7 +199,7 @@ async function run() {
 async function renderSearch(signal) {
   const params = new URLSearchParams({ q: state.q, engine: state.engine, limit: PAGE_SIZE, offset: state.page * PAGE_SIZE });
   const data = await api(`/search?${params}`, signal);
-  $('results').replaceChildren(cardList(data.results, highlightPattern(state.q)));
+  $('results').replaceChildren(cardList(data.results, highlightPattern(state.q), state.q));
 
   const pages = Math.ceil(data.total / PAGE_SIZE);
   $('pager').hidden = pages <= 1;
@@ -206,7 +218,7 @@ async function renderCompare(signal) {
       'div',
       { className: 'column' },
       el('h2', {}, ENGINE_LABELS[data.engine], el('span', { textContent: plural(data.total, 'result') })),
-      cardList(data.results, pattern),
+      cardList(data.results, pattern, state.q),
     );
   $('results').replaceChildren(el('div', { className: 'columns' }, column(sql), column(cosine)));
   $('pager').hidden = true;
