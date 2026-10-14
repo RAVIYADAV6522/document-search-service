@@ -210,8 +210,9 @@ export function createServer({ index, db, log = () => {} }) {
     // A fixed base rather than the Host header: only the path and query
     // matter, and a malformed Host would otherwise make new URL() throw.
     const url = new URL(req.url, 'http://localhost');
-    if (req.method !== 'GET') {
-      sendJson(res, 405, { error: 'method not allowed' }, { Allow: 'GET' });
+    // HEAD is answered like GET (Node drops the body); uptime monitors use it.
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      sendJson(res, 405, { error: 'method not allowed' }, { Allow: 'GET, HEAD' });
       return;
     }
     handle(req, res, url).catch((err) => {

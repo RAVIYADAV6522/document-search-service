@@ -107,10 +107,16 @@ test('a database error returns 500 without leaking its details', async () => {
   assert.ok(!text.includes('secret-host'), 'error details must not reach the client');
 });
 
-test('non-GET requests return 405 with an Allow header', async () => {
+test('other methods return 405 with an Allow header', async () => {
   const res = await fetch(`${base}/search?q=x`, { method: 'POST' });
   assert.equal(res.status, 405);
-  assert.equal(res.headers.get('allow'), 'GET');
+  assert.equal(res.headers.get('allow'), 'GET, HEAD');
+});
+
+test('HEAD requests succeed without a body', async () => {
+  const res = await fetch(`${await startWith(healthyDb)}/healthz`, { method: 'HEAD' });
+  assert.equal(res.status, 200);
+  assert.equal(await res.text(), '');
 });
 
 test('responses allow cross-origin reads', async () => {
