@@ -16,3 +16,7 @@ services:
         value: "22"
       - key: DATABASE_URL
         sync: false
+      # Google AI Studio key for /ask. Without it, /ask returns 503 and
+      # everything else, semantic search included, still works.
+      - key: GEMINI_API_KEY
+        sync: false

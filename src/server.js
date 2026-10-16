@@ -11,14 +11,27 @@ import {
   documentsWithAllTags,
   inactiveOwners,
   searchFullText,
+  searchSemantic,
 } from './repository.js';
 import { buildIndex, rankDocuments } from './ranker.js';
+import { createGemini } from './gemini.js';
+import { embed, toPgVector } from './embeddings.js';
+import { reciprocalRankFusion } from './hybrid.js';
+import { createRateLimiter } from './rate-limit.js';
+import { answerQuestion, ASK_SOURCES } from './ask.js';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const MAX_TAGS = 10;
-const ENGINES = ['cosine', 'sql'];
+const ENGINES = ['cosine', 'sql', 'semantic', 'hybrid'];
+const AI_ENGINES = new Set(['semantic', 'hybrid']);
 const MAX_QUERY_LENGTH = 500;
+// Semantic and hybrid rank the closest CANDIDATES documents and page within
+// them: every document is "similar" to some degree, so there is no natural
+// total the way there is for keyword matches.
+const CANDIDATES = 100;
+const MAX_BODY_BYTES = 4096;
+const QUERY_CACHE_SIZE = 500;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 // The search page. A fixed map from URL to file, read once at startup, so a
@@ -58,6 +71,27 @@ function sendStatic(res, { body, type }) {
     'Cache-Control': 'no-cache',
   });
   res.end(body);
+}
+
+// Reads a small JSON request body, rejecting anything larger than limit.
+async function readJson(req, limit = MAX_BODY_BYTES) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new HttpError(413, 'request body too large');
+    chunks.push(chunk);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch {
+    throw new HttpError(400, 'request body must be JSON');
+  }
+}
+
+// The client's address. Render's proxy puts it first in X-Forwarded-For.
+function clientIp(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
 }
 
 // Thrown for bad input found deep in a handler, so the error handler can
@@ -107,10 +141,55 @@ function parseTags(raw) {
 // database) without touching the real one.
 //   index: built by buildIndex(), used by /search
 //   db:    a pg Pool (or anything with .query), used by the SQL routes
+//   embedder: turns texts into vectors (embeddings.js), for semantic search
+//   ai:    a Gemini client (gemini.js) for /ask, or null to turn /ask off
+//   limits: per-client rate limits for the AI routes
 //   log:   called once per request with a summary object
-export function createServer({ index, db, log = () => {} }) {
+export function createServer({
+  index,
+  db,
+  embedder = embed,
+  ai = null,
+  limits = { searchPerMinute: 30, askPerMinute: 5, aiPerDay: 1500 },
+  log = () => {},
+}) {
+  const searchLimiter = createRateLimiter({ limit: limits.searchPerMinute, windowMs: 60_000 });
+  const askLimiter = createRateLimiter({ limit: limits.askPerMinute, windowMs: 60_000 });
+  // One shared bucket: the whole server's Gemini calls per day, so the
+  // free quota can't be spent by many clients at once.
+  const dailyLimiter = createRateLimiter({ limit: limits.aiPerDay, windowMs: 86_400_000 });
+
+  // Repeated queries (the suggestion chips, compare mode, paging) reuse the
+  // query's embedding instead of running the model again.
+  const queryVectors = new Map();
+  async function embedQuery(q) {
+    const key = q.trim().toLowerCase();
+    if (queryVectors.has(key)) return queryVectors.get(key);
+    const [values] = await embedder([key]);
+    const vector = toPgVector(values);
+    if (queryVectors.size >= QUERY_CACHE_SIZE) queryVectors.delete(queryVectors.keys().next().value);
+    queryVectors.set(key, vector);
+    return vector;
+  }
+
+  // Keyword matches and meaning matches, fused by rank (hybrid.js).
+  async function hybridSearch(q) {
+    const [keyword, semantic] = await Promise.all([
+      searchFullText(db, q, { limit: CANDIDATES, offset: 0 }),
+      searchSemantic(db, await embedQuery(q), { candidates: CANDIDATES }),
+    ]);
+    return reciprocalRankFusion([keyword.results, semantic]);
+  }
+
   async function handle(req, res, url) {
     const path = url.pathname;
+
+    if (req.method === 'POST') {
+      if (path !== '/ask') {
+        return sendJson(res, 405, { error: 'method not allowed' }, { Allow: 'GET, HEAD' });
+      }
+      return handleAsk(req, res);
+    }
 
     const file = STATIC_FILES.get(path);
     if (file) return sendStatic(res, file);
@@ -143,6 +222,11 @@ export function createServer({ index, db, log = () => {} }) {
         return sendJson(res, 400, { error: `engine must be one of: ${ENGINES.join(', ')}` });
       }
       const { limit, offset } = parsePagination(url.searchParams);
+      if (AI_ENGINES.has(engine)) {
+        if (!searchLimiter(clientIp(req))) {
+          return sendJson(res, 429, { error: 'too many semantic searches, wait a minute' }, { 'Retry-After': '60' });
+        }
+      }
 
       // cosine: the from-scratch in-memory ranker (ranker.js).
       // sql: Postgres full-text search (repository.js, migration 002).
@@ -150,6 +234,15 @@ export function createServer({ index, db, log = () => {} }) {
       let results;
       if (engine === 'sql') {
         ({ total, results } = await searchFullText(db, q, { limit, offset }));
+      } else if (AI_ENGINES.has(engine)) {
+        // semantic: nearest embeddings in pgvector (repository.js, migration 003).
+        // hybrid: sql and semantic merged with Reciprocal Rank Fusion.
+        const ranked =
+          engine === 'semantic'
+            ? await searchSemantic(db, await embedQuery(q), { candidates: CANDIDATES })
+            : await hybridSearch(q);
+        total = ranked.length;
+        results = ranked.slice(offset, offset + limit);
       } else {
         const allMatches = rankDocuments(q, index);
         total = allMatches.length;
@@ -196,6 +289,26 @@ export function createServer({ index, db, log = () => {} }) {
     return sendJson(res, 404, { error: 'not found' });
   }
 
+  // POST /ask {"question": "..."}: retrieval-augmented generation (ask.js).
+  // The top hybrid results are the only context the model gets.
+  async function handleAsk(req, res) {
+    if (!ai) return sendJson(res, 503, { error: 'AI answers are not configured on this server' });
+    const { question } = await readJson(req);
+    if (typeof question !== 'string' || !question.trim()) {
+      return sendJson(res, 400, { error: '"question" is required' });
+    }
+    if (question.length > MAX_QUERY_LENGTH) {
+      return sendJson(res, 400, { error: `question must be at most ${MAX_QUERY_LENGTH} characters` });
+    }
+    if (!askLimiter(clientIp(req))) {
+      return sendJson(res, 429, { error: 'too many questions, wait a minute' }, { 'Retry-After': '60' });
+    }
+    const sources = (await hybridSearch(question)).slice(0, ASK_SOURCES);
+    if (!dailyLimiter('global')) throw new HttpError(503, 'daily AI quota reached, try again tomorrow');
+    const { answer, model, cited } = await answerQuestion(ai, question, sources);
+    return sendJson(res, 200, { question, answer, cited, model, sources });
+  }
+
   return http.createServer((req, res) => {
     const started = process.hrtime.bigint();
     res.on('finish', () => {
@@ -211,7 +324,7 @@ export function createServer({ index, db, log = () => {} }) {
     // matter, and a malformed Host would otherwise make new URL() throw.
     const url = new URL(req.url, 'http://localhost');
     // HEAD is answered like GET (Node drops the body); uptime monitors use it.
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'POST') {
       sendJson(res, 405, { error: 'method not allowed' }, { Allow: 'GET, HEAD' });
       return;
     }
@@ -219,6 +332,12 @@ export function createServer({ index, db, log = () => {} }) {
       if (res.headersSent) return;
       if (err instanceof HttpError) {
         sendJson(res, err.status, { error: err.message });
+        return;
+      }
+      // Gemini being down or rate limited is reported as such, not as our bug.
+      if (err.name === 'GeminiError' || err.name === 'TimeoutError') {
+        console.error(JSON.stringify({ level: 'error', path: url.pathname, error: `gemini: ${err.message}` }));
+        sendJson(res, 503, { error: 'the AI service is busy, please try again in a moment' });
         return;
       }
       // Log the real error, but never send database details to the client.
@@ -232,13 +351,18 @@ async function main() {
   const port = readPort();
   const pool = createPool();
   const index = buildIndex(await listDocuments(pool));
+  const ai = createGemini();
+  if (!ai) console.log('GEMINI_API_KEY not set: /ask is disabled');
   const server = createServer({
     index,
     db: pool,
+    ai,
     log: (entry) => console.log(JSON.stringify(entry)),
   });
   server.listen(port, () => {
     console.log(`document search service listening on port ${port} (${index.length} documents)`);
+    // Load the embedding model now rather than on the first semantic query.
+    embed(['warm up']).catch((err) => console.error(`embedding model failed to load: ${err.message}`));
   });
 
   // The host sends SIGTERM before replacing an instance: stop accepting new

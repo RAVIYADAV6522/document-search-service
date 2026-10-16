@@ -45,7 +45,8 @@ before(async () => {
   await admin.query(`CREATE SCHEMA ${schema}`);
   await admin.end();
 
-  pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema}` });
+  // public stays on the path for extension types (pgvector's vector).
+  pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${schema},public` });
   await migrate(pool);
   await seed(pool, { owners, documents });
 

@@ -10,7 +10,8 @@
     "migrate": "node --env-file-if-exists=.env scripts/migrate.js",
     "seed": "node --env-file-if-exists=.env scripts/seed.js",
     "db:setup": "npm run migrate && npm run seed",
-    "test": "node --env-file-if-exists=.env --test"
+    "test": "node --env-file-if-exists=.env --test",
+    "embed": "node --env-file-if-exists=.env scripts/embed.js"
   },
   "engines": {
     "node": ">=22"
@@ -18,6 +19,7 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "pg": "^8.23.1"
   }
 }

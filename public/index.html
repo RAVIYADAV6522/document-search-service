@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Document Search</title>
-  <meta name="description" content="Search 10,000 documents with PostgreSQL full-text search or a from-scratch cosine-similarity ranker.">
+  <meta name="description" content="Search 10,000 documents by keyword or by meaning, or ask AI a question and get an answer with sources.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23b4526a'/%3E%3Ccircle cx='14' cy='14' r='6' fill='none' stroke='white' stroke-width='3'/%3E%3Cpath d='M19 19l6 6' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/app.js"></script>
@@ -28,6 +28,8 @@
         <input id="q" name="q" type="search" autocomplete="off" maxlength="500"
                placeholder="Search documents" autofocus>
         <button type="submit">Search</button>
+        <button type="button" id="ask-btn" class="ask-btn"
+                title="Answer the question from the most relevant documents, with sources">✦ Ask AI</button>
       </form>
 
       <div class="controls">
@@ -36,8 +38,12 @@
                   title="PostgreSQL full-text search: matches every word and understands word forms">SQL</button>
           <button type="button" role="radio" data-engine="cosine"
                   title="Cosine similarity ranker written from scratch: matches any word exactly">Cosine</button>
+          <button type="button" role="radio" data-engine="semantic"
+                  title="Semantic search: an embedding model matches meaning, not exact words">Semantic</button>
+          <button type="button" role="radio" data-engine="hybrid"
+                  title="Keyword and semantic results merged with Reciprocal Rank Fusion">Hybrid</button>
           <button type="button" role="radio" data-engine="compare"
-                  title="Run both engines side by side">Compare</button>
+                  title="Keyword and semantic search side by side">Compare</button>
         </div>
         <p class="library-meta" id="library-meta"></p>
       </div>

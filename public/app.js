@@ -4,8 +4,10 @@
 
 const PAGE_SIZE = 10;
 const SLOW_MS = 2500; // after this, explain that the free server may be waking up
-const SUGGESTIONS = ['budget', 'q2', '"latency spike"', 'finance -audit', 'roadmap'];
-const ENGINE_LABELS = { sql: 'SQL', cosine: 'Cosine' };
+const SUGGESTIONS = ['budget', 'website was slow for customers', '"latency spike"', 'finance -audit', 'roadmap'];
+const ASK_SUGGESTIONS = ['What caused the checkout-api latency spikes?', 'Which vendors had duplicate payments?'];
+const ENGINES = ['sql', 'cosine', 'semantic', 'hybrid', 'compare', 'ask'];
+const ENGINE_LABELS = { sql: 'SQL (keyword)', cosine: 'Cosine', semantic: 'Semantic (meaning)', hybrid: 'Hybrid' };
 const TAGS_COLLAPSED = 12;
 
 const $ = (id) => document.getElementById(id);
@@ -27,7 +29,7 @@ let inflight = null;
 function readUrl() {
   const p = new URLSearchParams(location.search);
   state.q = p.get('q') ?? '';
-  state.engine = ['sql', 'cosine', 'compare'].includes(p.get('engine')) ? p.get('engine') : 'sql';
+  state.engine = ENGINES.includes(p.get('engine')) ? p.get('engine') : 'sql';
   state.page = Math.max(0, Number.parseInt(p.get('page'), 10) || 0);
   state.tag = p.get('tag') ?? '';
 }
@@ -46,8 +48,8 @@ function writeUrl() {
 
 // ---- API ----
 
-async function api(path, signal) {
-  const res = await fetch(path, { signal });
+async function api(path, signal, init = {}) {
+  const res = await fetch(path, { signal, ...init });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? `request failed (${res.status})`);
   return body;
@@ -87,6 +89,7 @@ function highlighted(text, pattern) {
 
 function card(doc, pattern) {
   const node = $('card-template').content.firstElementChild.cloneNode(true);
+  node.id = `doc-${doc.id}`;
   node.querySelector('.card-title').append(highlighted(doc.title, pattern));
   node.querySelector('.card-body').append(highlighted(doc.body, pattern));
   const score = node.querySelector('.score');
@@ -106,6 +109,12 @@ function card(doc, pattern) {
 function suggestionChips() {
   return SUGGESTIONS.map((s) =>
     el('button', { type: 'button', className: 'chip', textContent: s, onclick: () => runQuery(s) }),
+  );
+}
+
+function askChips() {
+  return ASK_SUGGESTIONS.map((s) =>
+    el('button', { type: 'button', className: 'chip chip-ai', textContent: `✦ ${s}`, onclick: () => runAsk(s) }),
   );
 }
 
@@ -146,6 +155,15 @@ function syncControls() {
 }
 
 function runQuery(q) {
+  if (state.engine === 'ask') state.engine = 'sql';
+  state.q = q;
+  state.tag = '';
+  state.page = 0;
+  run();
+}
+
+function runAsk(q) {
+  state.engine = 'ask';
   state.q = q;
   state.tag = '';
   state.page = 0;
@@ -153,7 +171,14 @@ function runQuery(q) {
 }
 
 function welcome() {
-  return el('div', { className: 'welcome' }, el('p', { textContent: 'Try a search' }), el('div', { className: 'chips' }, ...suggestionChips()));
+  return el(
+    'div',
+    { className: 'welcome' },
+    el('p', { textContent: 'Try a search' }),
+    el('div', { className: 'chips' }, ...suggestionChips()),
+    el('p', { textContent: 'Or ask AI a question' }),
+    el('div', { className: 'chips' }, ...askChips()),
+  );
 }
 
 // ---- views ----
@@ -173,7 +198,7 @@ async function run() {
   }
 
   showSkeleton();
-  setStatus('Searching…');
+  setStatus(state.engine === 'ask' ? 'Reading the most relevant documents…' : 'Searching…');
   const slow = setTimeout(() => {
     setStatus('Waking up the server, this can take up to a minute…');
   }, SLOW_MS);
@@ -183,6 +208,7 @@ async function run() {
     let summary;
     if (state.tag) summary = await renderTag(signal);
     else if (state.engine === 'compare') summary = await renderCompare(signal);
+    else if (state.engine === 'ask') summary = await renderAsk(signal);
     else summary = await renderSearch(signal);
     setStatus(...summary, el('span', { className: 'muted', textContent: ` (${seconds(performance.now() - started)})` }));
   } catch (err) {
@@ -199,7 +225,9 @@ async function run() {
 async function renderSearch(signal) {
   const params = new URLSearchParams({ q: state.q, engine: state.engine, limit: PAGE_SIZE, offset: state.page * PAGE_SIZE });
   const data = await api(`/search?${params}`, signal);
-  $('results').replaceChildren(cardList(data.results, highlightPattern(state.q), state.q));
+  // Semantic matches are about meaning, so highlighting query words would mislead.
+  const pattern = state.engine === 'semantic' ? null : highlightPattern(state.q);
+  $('results').replaceChildren(cardList(data.results, pattern, state.q));
 
   const pages = Math.ceil(data.total / PAGE_SIZE);
   $('pager').hidden = pages <= 1;
@@ -211,18 +239,66 @@ async function renderSearch(signal) {
 
 async function renderCompare(signal) {
   const query = (engine) => api(`/search?${new URLSearchParams({ q: state.q, engine, limit: PAGE_SIZE })}`, signal);
-  const [sql, cosine] = await Promise.all([query('sql'), query('cosine')]);
+  const [sql, semantic] = await Promise.all([query('sql'), query('semantic')]);
   const pattern = highlightPattern(state.q);
   const column = (data) =>
     el(
       'div',
       { className: 'column' },
       el('h2', {}, ENGINE_LABELS[data.engine], el('span', { textContent: plural(data.total, 'result') })),
-      cardList(data.results, pattern, state.q),
+      cardList(data.results, data.engine === 'semantic' ? null : pattern, state.q),
     );
-  $('results').replaceChildren(el('div', { className: 'columns' }, column(sql), column(cosine)));
+  $('results').replaceChildren(el('div', { className: 'columns' }, column(sql), column(semantic)));
   $('pager').hidden = true;
-  return [el('strong', { textContent: 'Top 10 from each engine' })];
+  return [el('strong', { textContent: 'Keyword vs meaning: top 10 from each' })];
+}
+
+// The answer text, with each [doc-id] citation turned into a numbered link
+// to that source's card below it.
+function answerText(answer, sources) {
+  const number = new Map(sources.map((d, i) => [d.id, i + 1]));
+  const frag = document.createDocumentFragment();
+  let last = 0;
+  for (const m of answer.matchAll(/\[([^\]]+)\]/g)) {
+    const ids = m[1].split(/\s*,\s*/).filter((id) => number.has(id));
+    if (ids.length === 0) continue;
+    frag.append(answer.slice(last, m.index));
+    for (const id of ids) {
+      frag.append(el('a', { className: 'cite', href: `#doc-${id}`, textContent: number.get(id), title: id }));
+    }
+    last = m.index + m[0].length;
+  }
+  frag.append(answer.slice(last));
+  return frag;
+}
+
+async function renderAsk(signal) {
+  const data = await api('/ask', signal, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: state.q }),
+  });
+  const cited = new Set(data.cited);
+  const sourceCards = data.sources.map((doc, i) => {
+    const node = card(doc, null);
+    node.classList.toggle('cited', cited.has(doc.id));
+    node.querySelector('.card-title').prepend(el('span', { className: 'source-no', textContent: i + 1 }));
+    node.querySelector('.score').remove();
+    return node;
+  });
+  $('results').replaceChildren(
+    el(
+      'section',
+      { className: 'answer' },
+      el('h2', {}, '✦ AI answer', el('span', { textContent: data.model })),
+      el('p', {}, answerText(data.answer, data.sources)),
+      el('p', { className: 'answer-note', textContent: 'Written only from the sources below, found by hybrid search.' }),
+    ),
+    el('h2', { className: 'sources-title', textContent: 'Sources' }),
+    ...sourceCards,
+  );
+  $('pager').hidden = true;
+  return [el('strong', { textContent: `Answered from ${plural(data.sources.length, 'document')}` })];
 }
 
 async function renderTag(signal) {
@@ -302,6 +378,12 @@ async function loadSidebar() {
 $('search-form').addEventListener('submit', (e) => {
   e.preventDefault();
   runQuery($('q').value.trim());
+});
+
+$('ask-btn').addEventListener('click', () => {
+  const typed = $('q').value.trim();
+  if (typed) runAsk(typed);
+  else $('q').focus();
 });
 
 $('q').addEventListener('input', () => {

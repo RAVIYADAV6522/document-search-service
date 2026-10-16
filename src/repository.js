@@ -126,3 +126,53 @@ export async function searchFullText(db, query, { limit, offset }) {
   ]);
   return { total: count.rows[0].total, results: page.rows };
 }
+
+// Semantic search (GET /search?engine=semantic): the documents whose
+// embeddings are closest to the query's, by cosine distance (<=>), served by
+// the HNSW index from migration 003. score is cosine similarity (1 - distance).
+// HNSW only returns as many rows as hnsw.ef_search (default 40), so it is
+// raised for this transaction to cover every candidate asked for.
+export async function searchSemantic(db, queryVector, { candidates }) {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL hnsw.ef_search = ${Math.max(40, candidates)}`);
+    const { rows } = await client.query(
+      `SELECT d.id, d.title, d.body, d.owner_id AS owner, o.name AS owner_name, d.created_at AS created, ${TAGS_OF_D},
+              1 - (d.embedding <=> $1::vector) AS score
+       FROM documents d
+       JOIN owners o ON o.id = d.owner_id
+       WHERE d.embedding IS NOT NULL
+       ORDER BY d.embedding <=> $1::vector
+       LIMIT $2`,
+      [queryVector, candidates],
+    );
+    await client.query('COMMIT');
+    return rows;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Documents still waiting for an embedding (scripts/embed.js).
+export async function documentsWithoutEmbedding(db, limit) {
+  const { rows } = await db.query(
+    'SELECT id, title, body FROM documents WHERE embedding IS NULL ORDER BY id LIMIT $1',
+    [limit],
+  );
+  return rows;
+}
+
+// Stores one batch of embeddings in a single statement: two parallel arrays
+// unnested into rows and joined on id.
+export async function saveEmbeddings(db, ids, vectors) {
+  await db.query(
+    `UPDATE documents d SET embedding = v.embedding::vector
+     FROM unnest($1::text[], $2::text[]) AS v(id, embedding)
+     WHERE d.id = v.id`,
+    [ids, vectors],
+  );
+}

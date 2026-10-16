@@ -76,6 +76,7 @@ button { font: inherit; cursor: pointer; }
   padding: 10px 20px; font-weight: 600;
 }
 .searchbar button:hover { filter: brightness(1.08); }
+.searchbar .ask-btn { background: var(--accent-soft); color: var(--accent-text); white-space: nowrap; }
 
 .controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
 .segmented {
@@ -98,6 +99,31 @@ button { font: inherit; cursor: pointer; }
 .status.error { color: var(--danger); }
 
 .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* Ask AI */
+.answer {
+  background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius);
+  padding: 16px 18px; box-shadow: 0 0 0 3px var(--accent-soft); margin-bottom: 20px;
+}
+.answer h2 { font-size: 14px; margin: 0 0 8px; color: var(--accent-text); display: flex; justify-content: space-between; gap: 8px; }
+.answer h2 span { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+.answer p { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.answer .answer-note { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.cite {
+  display: inline-block; min-width: 18px; padding: 0 5px; margin: 0 1px; border-radius: 6px;
+  background: var(--accent-soft); color: var(--accent-text); font-size: 12px; font-weight: 600;
+  text-align: center; text-decoration: none; vertical-align: 2px; line-height: 18px;
+}
+.cite:hover { background: var(--accent); color: var(--on-accent); }
+.sources-title { font-size: 14px; margin: 0 0 10px; }
+.source-no {
+  display: inline-block; min-width: 20px; margin-right: 8px; border-radius: 6px; padding: 0 5px;
+  background: var(--surface-2); color: var(--muted); font-size: 12px; text-align: center; vertical-align: 2px;
+}
+.card.cited { border-color: var(--accent); }
+.card.cited .source-no { background: var(--accent); color: var(--on-accent); }
+.card:target { box-shadow: 0 0 0 3px var(--accent-soft); }
+
 .column h2 { font-size: 14px; margin: 0 0 10px; display: flex; justify-content: space-between; gap: 8px; }
 .column h2 span { color: var(--muted); font-weight: 500; }
 
@@ -141,6 +167,8 @@ mark { background: var(--mark); color: var(--mark-text); border-radius: 3px; pad
   border-radius: 999px; padding: 5px 14px; font-size: 14px;
 }
 .chip:hover { border-color: var(--accent); color: var(--accent-text); }
+.chip-ai { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); }
+.welcome .chips + p { margin-top: 24px; }
 
 .nothing {
   background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius);
@@ -219,8 +247,11 @@ mark { background: var(--mark); color: var(--mark-text); border-radius: 3px; pad
   .searchbar button { padding: 10px 14px; }
   /* The engine switch spans the width and shares it equally, so it can
      never be wider than the screen. */
-  .segmented { display: flex; width: 100%; }
-  .segmented button { flex: 1; min-width: 0; padding: 6px 4px; }
+  .segmented { display: flex; flex-wrap: wrap; width: 100%; }
+  .segmented button { flex: 1 1 30%; min-width: 0; padding: 6px 4px; }
+  .searchbar { flex-wrap: wrap; }
+  .searchbar input { flex-basis: calc(100% - 40px); }
+  .searchbar button { flex: 1; }
 }
 @media (max-width: 300px) {
   .wrap { padding: 0 12px; }
