@@ -20,7 +20,7 @@ and cites the documents it used.
 | **Frontend** | One page of plain HTML/CSS/JS served by the same server, no framework or build step |
 | **Database** | PostgreSQL 16 (Neon in production, Docker locally), `pg` driver |
 | **Search** | `engine=sql`: `tsvector` + GIN index + `ts_rank` · `engine=cosine`: hand-rolled bag-of-words cosine similarity · `engine=semantic`: all-MiniLM-L6-v2 embeddings + pgvector HNSW index · `engine=hybrid`: Reciprocal Rank Fusion of sql + semantic |
-| **AI** | Embeddings computed in-process with transformers.js (ONNX, no API cost) · answers from Google Gemini (`gemini-3.5-flash-lite`, with fallback models) |
+| **AI** | Embeddings computed in-process with transformers.js (ONNX, no API cost) · answers from Google Gemini (`gemini-flash-latest`, with fallback models) |
 | **Data** | 10,000 documents from 25 owners: 28 hand-written plus 9,972 generated deterministically |
 | **Tests** | `node:test`, 65 tests, including integration tests against a real Postgres with pgvector |
 | **Deploy** | Render (web service) + Neon (Postgres) |

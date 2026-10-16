@@ -5,15 +5,22 @@
 
 export const ASK_SOURCES = 5;
 
-const SYSTEM = `You answer questions about a company's internal documents.
-Use ONLY the documents provided. Do not use outside knowledge.
-After each fact, cite the document it came from in square brackets, e.g. [doc-001].
-If the documents do not contain the answer, reply exactly: "I couldn't find that in the documents."
+const SYSTEM = `You answer questions about a company's internal documents, using ONLY the documents provided, never outside knowledge.
+
+Step 1: Decide whether any document is about the topic of the question.
+- If none is, reply exactly: "I couldn't find that in the documents." and stop.
+Step 2: Otherwise, always answer from the relevant documents, even if they don't contain the exact thing asked:
+- Questions often don't match the documents word for word. Report what the documents do say about the topic (names, numbers, findings).
+- If something asked for is not in them, add one short sentence saying what is missing.
+- Each document has a date; use it for questions about the newest, latest or oldest.
+- If the input is just a topic or keyword (e.g. "budget"), summarize what the documents say about it.
+
+Every sentence must end with the ids of the documents it came from in square brackets, e.g. [doc-001] or [doc-001, doc-002].
 Keep the answer under 120 words, in plain text without markdown.`;
 
 export function buildPrompt(question, docs) {
   const context = docs
-    .map((d) => `[${d.id}] ${d.title}\nTags: ${d.tags.join(', ')}\n${d.body}`)
+    .map((d) => `[${d.id}] ${d.title}\nDate: ${d.created ? new Date(d.created).toISOString().slice(0, 10) : 'unknown'}\nTags: ${d.tags.join(', ')}\n${d.body}`)
     .join('\n\n---\n\n');
   return `Documents:\n\n${context}\n\nQuestion: ${question}`;
 }

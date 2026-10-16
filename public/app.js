@@ -292,9 +292,14 @@ async function renderAsk(signal) {
       { className: 'answer' },
       el('h2', {}, '✦ AI answer', el('span', { textContent: data.model })),
       el('p', {}, answerText(data.answer, data.sources)),
-      el('p', { className: 'answer-note', textContent: 'Written only from the sources below, found by hybrid search.' }),
+      el('p', {
+        className: 'answer-note',
+        textContent: cited.size
+          ? 'Written only from the sources below, found by hybrid search.'
+          : 'The AI read the documents below (found by hybrid search) but none of them answered this.',
+      }),
     ),
-    el('h2', { className: 'sources-title', textContent: 'Sources' }),
+    el('h2', { className: 'sources-title', textContent: cited.size ? 'Sources' : 'Documents checked' }),
     ...sourceCards,
   );
   $('pager').hidden = true;

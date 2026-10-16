@@ -6,7 +6,7 @@ const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const TIMEOUT_MS = 12_000;
 // Free-tier models are sometimes overloaded (503) or slow; each is tried in
 // turn until one answers.
-const DEFAULT_CHAT_MODELS = 'gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-flash-lite-latest';
+const DEFAULT_CHAT_MODELS = 'gemini-flash-latest,gemini-3.1-flash-lite,gemini-3.5-flash-lite,gemini-flash-lite-latest';
 
 export class GeminiError extends Error {
   constructor(status, message) {
